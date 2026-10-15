@@ -51,14 +51,3 @@ As a **customer**, I want to log in and out safely, so that my data stays privat
 ### US-1.3 Reset password `P1`
 As a **customer**, I want to reset my password by email, so that I can get back in if I forget it.
 - Done when: the reset link works once and expires after a short time.
-
-### US-1.4 Edit profile and company info `P1`
-As a **customer**, I want to save my name, company, and sender address, so that emails show correct details (also needed for legal footer).
-- Done when: my company name and postal address appear in the email footer.
-
-### US-1.5 Two-step login (2FA) `P2`
-As a **customer**, I want to turn on two-step login, so that my account is more secure.
-
-### US-1.6 Invite team members `P2`
-As an **owner**, I want to invite team members with roles (admin, editor, viewer), so that we can work together safely.
-- Done when: a viewer cannot send campaigns, and an editor cannot change billing.
