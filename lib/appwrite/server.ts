@@ -1,4 +1,4 @@
-import { Client, Account, Databases } from "node-appwrite";
+import { Client, Account, Databases, TablesDB } from "node-appwrite";
 import { cookies } from "next/headers";
 
 export const SESSION_COOKIE = "mailflow-session";
@@ -16,6 +16,9 @@ export function createAdminClient() {
     },
     get databases() {
       return new Databases(client);
+    },
+    get tablesDB() {
+      return new TablesDB(client);
     },
   };
 }
