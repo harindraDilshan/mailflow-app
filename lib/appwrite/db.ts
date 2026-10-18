@@ -6,3 +6,4 @@ export const CONTACTS_TABLE = "contacts";
 export const LISTS_TABLE = "lists";
 export const CAMPAIGNS_TABLE = "campaigns";
 export const MESSAGES_TABLE = "messages";
+export const EVENTS_TABLE = "events";

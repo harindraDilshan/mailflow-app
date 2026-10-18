@@ -28,6 +28,8 @@ export type MessageRow = {
   email: string;
   name: string | null;
   status: string; // queued | sent | failed
+  openedAt: string | null;
+  clickedAt: string | null;
 };
 
 // Same campaign + same contact = same message ID. A person cannot get two rows.

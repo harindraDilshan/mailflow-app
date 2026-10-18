@@ -80,11 +80,35 @@ const specs: Spec[] = [
       { key: "providerMessageId", type: "varchar", size: 200 },
       { key: "sentAt", type: "datetime" },
       { key: "attempts", type: "int", default: 0 },
+      { key: "openedAt", type: "datetime" },
+      { key: "clickedAt", type: "datetime" },
     ],
     indexes: [
       { key: "idx_account", type: "key", columns: ["accountId"] },
       { key: "idx_campaign", type: "key", columns: ["campaignId"] },
       { key: "idx_campaign_status", type: "key", columns: ["campaignId", "status"] },
+      { key: "idx_opened", type: "key", columns: ["openedAt"] },
+      { key: "idx_clicked", type: "key", columns: ["clickedAt"] },
+    ],
+  },
+  {
+    id: "events",
+    name: "events",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "campaignId", type: "varchar", size: 36, required: true },
+      { key: "messageId", type: "varchar", size: 36, required: true },
+      { key: "contactId", type: "varchar", size: 36, required: true },
+      { key: "type", type: "varchar", size: 20, required: true }, // open click delivered bounce complaint unsubscribe
+      { key: "url", type: "text" },
+      { key: "urlHash", type: "varchar", size: 16 },
+      { key: "userAgent", type: "varchar", size: 300 },
+    ],
+    indexes: [
+      { key: "idx_account", type: "key", columns: ["accountId"] },
+      { key: "idx_message", type: "key", columns: ["messageId"] },
+      { key: "idx_campaign_type", type: "key", columns: ["campaignId", "type"] },
+      { key: "idx_campaign_type_url", type: "key", columns: ["campaignId", "type", "urlHash"] },
     ],
   },
 ];
@@ -132,6 +156,15 @@ async function tableExists(id: string) {
   }
 }
 
+async function existingKeys(tableId: string) {
+  const cols = (await db.listColumns({ databaseId, tableId })) as unknown as { columns: { key: string }[] };
+  const idx = (await db.listIndexes({ databaseId, tableId })) as unknown as { indexes: { key: string }[] };
+  return {
+    columns: new Set(cols.columns.map((c) => c.key)),
+    indexes: new Set(idx.indexes.map((i) => i.key)),
+  };
+}
+
 async function main() {
   const reset = process.argv.includes("--reset");
 
@@ -148,15 +181,22 @@ async function main() {
   }
 
   for (const s of specs) {
-    if (await tableExists(s.id)) {
-      console.log(`${s.id}: already exists, skipping (use db:reset to recreate)`);
-      continue;
+    const exists = await tableExists(s.id);
+    if (!exists) {
+      console.log(`Creating ${s.id}...`);
+      await db.createTable({ databaseId, tableId: s.id, name: s.name, rowSecurity: true });
     }
-    console.log(`Creating ${s.id}...`);
-    await db.createTable({ databaseId, tableId: s.id, name: s.name, rowSecurity: true });
-    for (const c of s.columns) await addColumn(s.id, c);
-    await waitUntilReady(s.id, "columns");
-    for (const i of s.indexes) {
+
+    const have = exists
+      ? await existingKeys(s.id)
+      : { columns: new Set<string>(), indexes: new Set<string>() };
+
+    const newCols = s.columns.filter((c) => !have.columns.has(c.key));
+    for (const c of newCols) await addColumn(s.id, c);
+    if (newCols.length) await waitUntilReady(s.id, "columns");
+
+    const newIdx = s.indexes.filter((i) => !have.indexes.has(i.key));
+    for (const i of newIdx) {
       await db.createIndex({
         databaseId,
         tableId: s.id,
@@ -165,8 +205,9 @@ async function main() {
         columns: i.columns,
       });
     }
-    await waitUntilReady(s.id, "indexes");
-    console.log(`${s.id}: ready`);
+    if (newIdx.length) await waitUntilReady(s.id, "indexes");
+
+    console.log(`${s.id}: ${newCols.length} new columns, ${newIdx.length} new indexes`);
   }
   console.log("Done.");
 }

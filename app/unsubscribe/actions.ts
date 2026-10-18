@@ -1,13 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { verifyToken } from "@/lib/unsubscribe-token";
 import { unsubscribeContact } from "@/lib/unsubscribe";
+import { parseToken } from "@/lib/unsubscribe-token";
 
 export async function confirmUnsubscribe(formData: FormData): Promise<void> {
-  const contactId = verifyToken(String(formData.get("t") ?? ""));
-  if (!contactId) redirect("/unsubscribe"); // shows "not valid"
+  const t = parseToken(String(formData.get("t") ?? ""));
+  if (!t) redirect("/unsubscribe");
 
-  await unsubscribeContact(contactId);
+  await unsubscribeContact(t.contactId, t.messageId);
   redirect("/unsubscribe/done");
 }

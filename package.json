@@ -14,7 +14,9 @@
     "worker": "tsx --env-file=.env worker/index.ts",
     "seed": "tsx --env-file=.env scripts/seed-contacts.ts",
     "generate-csv": "tsx scripts/generate-contacts-csv.ts",
-    "unsub-link": "tsx --env-file=.env scripts/unsubscribe-link.ts"
+    "unsub-link": "tsx --env-file=.env scripts/unsubscribe-link.ts",
+    "simulate": "tsx --env-file=.env scripts/simulate-activity.ts",
+    "seed:clean": "tsx --env-file=.env scripts/seed-clean.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1152.0",

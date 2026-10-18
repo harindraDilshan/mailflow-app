@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken } from "@/lib/unsubscribe-token";
 import { unsubscribeContact } from "@/lib/unsubscribe";
+import { parseToken } from "@/lib/unsubscribe-token";
 
 // Mail apps call this with POST when the user presses their own "Unsubscribe" button.
 export async function POST(req: NextRequest) {
-  const contactId = verifyToken(req.nextUrl.searchParams.get("t") ?? "");
-  if (!contactId) return new NextResponse("Invalid link", { status: 400 });
+  const t = parseToken(req.nextUrl.searchParams.get("t") ?? "");
+  if (!t) return new NextResponse("Invalid link", { status: 400 });
 
-  await unsubscribeContact(contactId);
+  await unsubscribeContact(t.contactId, t.messageId);
   return new NextResponse("Unsubscribed", { status: 200 });
 }
 

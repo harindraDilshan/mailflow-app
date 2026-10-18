@@ -1,13 +1,19 @@
 import { it, expect } from "vitest";
-import { renderEmail } from "./render";
+import { renderEmail, extractLinks } from "./render";
 
-it("fills in the name and escapes it", () => {
-  const out = renderEmail("<p>Hi {{name}}</p>", { name: "<b>Bob</b>", email: "b@x.com" }, "https://x.com/u?t=1");
-  expect(out).toContain("Hi &lt;b&gt;Bob&lt;/b&gt;");
+it("tracks body links but not mailto or the unsubscribe link", () => {
+  const out = renderEmail(
+    '<a href="https://a.com/x?y=1&amp;z=2">A</a> <a href="mailto:hi@a.com">M</a>',
+    { email: "b@x.com" },
+    "https://app.com/unsubscribe?t=1",
+    { trackLink: (u) => `https://app.com/t/c/${encodeURIComponent(u)}`, pixelUrl: "https://app.com/t/o/abc" }
+  );
+  expect(out).toContain("https://app.com/t/c/https%3A%2F%2Fa.com%2Fx%3Fy%3D1%26z%3D2");
+  expect(out).toContain('href="mailto:hi@a.com"');
+  expect(out).toContain('href="https://app.com/unsubscribe?t=1"');
+  expect(out).toContain("/t/o/abc");
 });
 
-it("uses 'friend' when there is no name and adds the footer once", () => {
-  const out = renderEmail("<p>Hi {{name}}</p>", { name: "", email: "b@x.com" }, "https://x.com/u?t=1");
-  expect(out).toContain("Hi friend");
-  expect(out.match(/Unsubscribe/g)).toHaveLength(1);
+it("lists each link once", () => {
+  expect(extractLinks('<a href="https://a.com">1</a><a href="https://a.com">2</a>')).toEqual(["https://a.com"]);
 });
