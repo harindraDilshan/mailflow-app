@@ -12,7 +12,9 @@
     "db:setup": "tsx --env-file=.env scripts/setup-tables.ts",
     "db:reset": "tsx --env-file=.env scripts/setup-tables.ts --reset",
     "worker": "tsx --env-file=.env worker/index.ts",
-    "seed": "tsx --env-file=.env scripts/seed-contacts.ts"
+    "seed": "tsx --env-file=.env scripts/seed-contacts.ts",
+    "generate-csv": "tsx scripts/generate-contacts-csv.ts",
+    "unsub-link": "tsx --env-file=.env scripts/unsubscribe-link.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1152.0",

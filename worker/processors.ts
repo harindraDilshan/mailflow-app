@@ -112,26 +112,52 @@ async function updateMessage(id: string, data: Record<string, unknown>) {
   return false;
 }
 
+const notFound = (e: unknown) => (e as { code?: number })?.code === 404;
+
 export async function sendEmail(job: Job<{ messageId: string; campaignId: string }>) {
   const { tablesDB } = createAdminClient();
   const { messageId, campaignId } = job.data;
 
-  // Never send twice: only a "queued" message may be sent.
+  // 1. Never send twice: only a "queued" message may be sent.
   let msg: MessageRow;
   try {
     msg = (await tablesDB.getRow({
       databaseId: DB_ID, tableId: MESSAGES_TABLE, rowId: messageId,
     })) as unknown as MessageRow;
-  } catch {
-    return; // message is gone
+  } catch (e) {
+    if (notFound(e)) return; // message is gone
+    throw e; // temporary problem: try again later
   }
   if (msg.status !== "queued") return;
 
+  // 2. Does this person still want emails? (They may have unsubscribed a minute ago.)
+  let contactStatus: string | null = null;
+  try {
+    const contact = (await tablesDB.getRow({
+      databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: msg.contactId,
+    })) as unknown as { status: string };
+    contactStatus = contact.status;
+  } catch (e) {
+    if (!notFound(e)) throw e; // deleted contact: contactStatus stays null
+  }
+  if (contactStatus !== "active") {
+    await updateMessage(messageId, {
+      status: "skipped",
+      error: contactStatus ? `Contact is ${contactStatus}` : "Contact was deleted",
+    });
+    return;
+  }
+
+  // 3. Build and send
   const campaign = await cachedCampaign(campaignId);
   if (!campaign) throw new Error("Campaign not found");
 
-  const unsubscribeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/unsubscribe?t=${signToken(msg.contactId)}`;
-  const html = renderEmail(campaign.html, { name: msg.name, email: msg.email }, unsubscribeUrl);
+  const base = process.env.NEXT_PUBLIC_APP_URL;
+  const token = signToken(msg.contactId);
+  const pageUrl = `${base}/unsubscribe?t=${token}`;        // link in the footer
+  const oneClickUrl = `${base}/api/unsubscribe?t=${token}`; // for the mail app's own button
+
+  const html = renderEmail(campaign.html, { name: msg.name, email: msg.email }, pageUrl);
   const fromName = cleanHeader(campaign.fromName ?? "");
 
   const res = await getProvider().send({
@@ -141,7 +167,7 @@ export async function sendEmail(job: Job<{ messageId: string; campaignId: string
     html,
     text: htmlToText(html),
     headers: {
-      "List-Unsubscribe": `<${unsubscribeUrl}>`,
+      "List-Unsubscribe": `<${oneClickUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
   });
