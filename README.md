@@ -51,3 +51,10 @@ As a **customer**, I want to log in and out safely, so that my data stays privat
 ### US-1.3 Reset password `P1`
 As a **customer**, I want to reset my password by email, so that I can get back in if I forget it.
 - Done when: the reset link works once and expires after a short time.
+
+---
+### this deletes your old contacts and lists tables and creates all four
+npm run db:reset
+
+### After the first time only creates what is missing.
+npm run db:setup
