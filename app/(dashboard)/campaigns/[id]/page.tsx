@@ -19,11 +19,16 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const issues = [...(review?.issues ?? [])];
   if (isDraft && !user.emailVerification) issues.push("Verify your email first.");
 
-  const [queued, sent, failed] = isDraft
-    ? [0, 0, 0]
-    : await Promise.all([countMessages(c.$id, "queued"), countMessages(c.$id, "sent"), countMessages(c.$id, "failed")]);
-  const total = queued + sent + failed;
-  const done = sent + failed;
+  const [queued, sent, failed, skipped] = isDraft
+    ? [0, 0, 0, 0]
+    : await Promise.all([
+        countMessages(c.$id, "queued"),
+        countMessages(c.$id, "sent"),
+        countMessages(c.$id, "failed"),
+        countMessages(c.$id, "skipped"),
+      ]);
+  const total = queued + sent + failed + skipped;
+  const done = sent + failed + skipped;
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
@@ -62,6 +67,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           <p>Sent: <b>{sent}</b></p>
           <p>Waiting: <b>{queued}</b></p>
           <p>Failed: <b>{failed}</b></p>
+          <p>Skipped (unsubscribed or removed): <b>{skipped}</b></p>
           {c.status === "queued" && <p className="mt-2 text-gray-500">Preparing the list of recipients...</p>}
         </div>
       )}

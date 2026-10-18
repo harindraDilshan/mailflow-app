@@ -15,6 +15,7 @@ Open [http://localhost:3000](http://localhost:3000).
 - `npm run build` – production build
 - `npm run start` – run the production build
 - `npm run lint` – lint the project
+- `npm run generate-csv -- [count] [output.csv]` – create a sample contacts CSV for import (defaults to 1,000 rows in `contacts.csv`; maximum 5,000)
 
 ---
 
