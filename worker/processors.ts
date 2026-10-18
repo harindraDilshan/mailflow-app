@@ -10,6 +10,7 @@ import { getQueues } from "@/lib/queue";
 import { getProvider } from "@/lib/email";
 import { renderEmail, htmlToText, cleanHeader } from "@/lib/email/render";
 import { signToken } from "@/lib/unsubscribe-token";
+import { signClick, signOpen } from "@/lib/tracking-token";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isConflict = (e: unknown) => (e as { code?: number })?.code === 409;
@@ -153,11 +154,19 @@ export async function sendEmail(job: Job<{ messageId: string; campaignId: string
   if (!campaign) throw new Error("Campaign not found");
 
   const base = process.env.NEXT_PUBLIC_APP_URL;
-  const token = signToken(msg.contactId);
-  const pageUrl = `${base}/unsubscribe?t=${token}`;        // link in the footer
-  const oneClickUrl = `${base}/api/unsubscribe?t=${token}`; // for the mail app's own button
+  const token = signToken(msg.contactId, messageId); // now carries the message ID
+  const pageUrl = `${base}/unsubscribe?t=${token}`;
+  const oneClickUrl = `${base}/api/unsubscribe?t=${token}`;
 
-  const html = renderEmail(campaign.html, { name: msg.name, email: msg.email }, pageUrl);
+  const tracking =
+  process.env.TRACKING_ENABLED === "false"
+    ? undefined
+    : {
+        trackLink: (url: string) => `${base}/t/c/${signClick(messageId, url)}`,
+        pixelUrl: `${base}/t/o/${signOpen(messageId)}`,
+      };
+
+  const html = renderEmail(campaign.html, { name: msg.name, email: msg.email }, pageUrl, tracking);
   const fromName = cleanHeader(campaign.fromName ?? "");
 
   const res = await getProvider().send({

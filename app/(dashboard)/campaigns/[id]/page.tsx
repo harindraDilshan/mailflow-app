@@ -3,6 +3,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { requireUser } from "@/lib/auth";
 import { countMessages, getOwnedCampaign, reviewCampaign } from "@/lib/campaigns";
 import { sendCampaign } from "../actions";
+import Link from "next/link";
 
 const LABEL: Record<string, string> = {
   draft: "Draft", queued: "Preparing", sending: "Sending", sent: "Done", failed: "Failed",
@@ -68,6 +69,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           <p>Waiting: <b>{queued}</b></p>
           <p>Failed: <b>{failed}</b></p>
           <p>Skipped (unsubscribed or removed): <b>{skipped}</b></p>
+          <p className="mt-3"><Link href={`/campaigns/${c.$id}/report`} className="underline">View full report →</Link></p>
           {c.status === "queued" && <p className="mt-2 text-gray-500">Preparing the list of recipients...</p>}
         </div>
       )}
