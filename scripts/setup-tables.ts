@@ -1,0 +1,177 @@
+import { Client, TablesDB, TablesDBIndexType } from "node-appwrite";
+
+const databaseId = process.env.APPWRITE_DATABASE_ID!;
+const client = new Client()
+  .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
+  .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!)
+  .setKey(process.env.APPWRITE_API_KEY!);
+const db = new TablesDB(client);
+
+type Col =
+  | { key: string; type: "varchar"; size: number; required?: boolean; default?: string; array?: boolean }
+  | { key: string; type: "text"; required?: boolean }
+  | { key: string; type: "int"; required?: boolean; default?: number }
+  | { key: string; type: "datetime"; required?: boolean };
+type Idx = { key: string; type: "key" | "unique"; columns: string[] };
+type Spec = { id: string; name: string; columns: Col[]; indexes: Idx[] };
+
+const specs: Spec[] = [
+  {
+    id: "lists",
+    name: "lists",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "name", type: "varchar", size: 100, required: true },
+    ],
+    indexes: [{ key: "idx_account", type: "key", columns: ["accountId"] }],
+  },
+  {
+    id: "contacts",
+    name: "contacts",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "email", type: "varchar", size: 254, required: true },
+      { key: "name", type: "varchar", size: 200 },
+      { key: "status", type: "varchar", size: 20, default: "active" },
+      { key: "source", type: "varchar", size: 20, default: "manual" },
+      { key: "tags", type: "varchar", size: 50, array: true },
+      { key: "listIds", type: "varchar", size: 36, array: true },
+      { key: "consentAt", type: "datetime" },
+    ],
+    indexes: [
+      { key: "uniq_account_email", type: "unique", columns: ["accountId", "email"] },
+      { key: "idx_account", type: "key", columns: ["accountId"] },
+      { key: "idx_status", type: "key", columns: ["status"] },
+      { key: "idx_email", type: "key", columns: ["email"] },
+      { key: "idx_name", type: "key", columns: ["name"] },
+    ],
+  },
+  {
+    id: "campaigns",
+    name: "campaigns",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "name", type: "varchar", size: 150, required: true },
+      { key: "subject", type: "varchar", size: 200, required: true },
+      { key: "fromName", type: "varchar", size: 100 },
+      { key: "fromEmail", type: "varchar", size: 254, required: true },
+      { key: "html", type: "text", required: true },
+      { key: "listIds", type: "varchar", size: 36, array: true },
+      { key: "status", type: "varchar", size: 20, default: "draft" },
+      { key: "startedAt", type: "datetime" },
+      { key: "finishedAt", type: "datetime" },
+    ],
+    indexes: [
+      { key: "idx_account", type: "key", columns: ["accountId"] },
+      { key: "idx_status", type: "key", columns: ["status"] },
+    ],
+  },
+  {
+    id: "messages",
+    name: "messages",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "campaignId", type: "varchar", size: 36, required: true },
+      { key: "contactId", type: "varchar", size: 36, required: true },
+      { key: "email", type: "varchar", size: 254, required: true },
+      { key: "name", type: "varchar", size: 200 },
+      { key: "status", type: "varchar", size: 20, default: "queued" },
+      { key: "error", type: "varchar", size: 500 },
+      { key: "providerMessageId", type: "varchar", size: 200 },
+      { key: "sentAt", type: "datetime" },
+      { key: "attempts", type: "int", default: 0 },
+    ],
+    indexes: [
+      { key: "idx_account", type: "key", columns: ["accountId"] },
+      { key: "idx_campaign", type: "key", columns: ["campaignId"] },
+      { key: "idx_campaign_status", type: "key", columns: ["campaignId", "status"] },
+    ],
+  },
+];
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function addColumn(tableId: string, c: Col) {
+  const base = { databaseId, tableId, key: c.key, required: c.required ?? false };
+  switch (c.type) {
+    case "varchar":
+      return db.createVarcharColumn({ ...base, size: c.size, xdefault: c.default, array: c.array });
+    case "text":
+      return db.createTextColumn(base);
+    case "int":
+      return db.createIntegerColumn({ ...base, xdefault: c.default });
+    case "datetime":
+      return db.createDatetimeColumn(base);
+  }
+}
+
+type Status = { key: string; status: string };
+
+async function waitUntilReady(tableId: string, what: "columns" | "indexes") {
+  for (let i = 0; i < 90; i++) {
+    const res = what === "columns"
+      ? await db.listColumns({ databaseId, tableId })
+      : await db.listIndexes({ databaseId, tableId });
+    const items = (what === "columns"
+      ? (res as unknown as { columns: Status[] }).columns
+      : (res as unknown as { indexes: Status[] }).indexes);
+    const failed = items.find((x) => x.status === "failed");
+    if (failed) throw new Error(`${what} "${failed.key}" failed on table ${tableId}`);
+    if (items.every((x) => x.status === "available")) return;
+    await sleep(1000);
+  }
+  throw new Error(`Timed out waiting for ${what} on ${tableId}`);
+}
+
+async function tableExists(id: string) {
+  try {
+    await db.getTable({ databaseId, tableId: id });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function main() {
+  const reset = process.argv.includes("--reset");
+
+  if (reset) {
+    console.log("RESET: deleting tables and ALL their data in 5 seconds. Press Ctrl+C to cancel.");
+    await sleep(5000);
+    for (const s of specs) {
+      if (await tableExists(s.id)) {
+        await db.deleteTable({ databaseId, tableId: s.id });
+        console.log(`Deleted ${s.id}`);
+      }
+    }
+    await sleep(2000);
+  }
+
+  for (const s of specs) {
+    if (await tableExists(s.id)) {
+      console.log(`${s.id}: already exists, skipping (use db:reset to recreate)`);
+      continue;
+    }
+    console.log(`Creating ${s.id}...`);
+    await db.createTable({ databaseId, tableId: s.id, name: s.name, rowSecurity: true });
+    for (const c of s.columns) await addColumn(s.id, c);
+    await waitUntilReady(s.id, "columns");
+    for (const i of s.indexes) {
+      await db.createIndex({
+        databaseId,
+        tableId: s.id,
+        key: i.key,
+        type: i.type === "unique" ? TablesDBIndexType.Unique : TablesDBIndexType.Key,
+        columns: i.columns,
+      });
+    }
+    await waitUntilReady(s.id, "indexes");
+    console.log(`${s.id}: ready`);
+  }
+  console.log("Done.");
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
