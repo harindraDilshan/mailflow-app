@@ -1,11 +1,25 @@
 import { Worker } from "bullmq";
-import { createConnection, PREPARE_QUEUE, EMAIL_QUEUE, CONFIRM_QUEUE } from "@/lib/queue";
+import { createConnection, PREPARE_QUEUE, EMAIL_QUEUE, CONFIRM_QUEUE, AUTOMATION_QUEUE } from "@/lib/queue";
 import { prepareCampaign, sendEmail, sendConfirmation, markMessageFailed, 
   finalizeCampaigns, markCampaignFailed } from "./processors";
+import { automationTrigger, automationStep, sweepRuns } from "./automation";
 
 
 const rate = Number(process.env.SEND_RATE_PER_SECOND ?? 10);
 const concurrency = Number(process.env.SEND_CONCURRENCY ?? 5);
+
+
+
+const automationWorker = new Worker(
+  AUTOMATION_QUEUE,
+  (job) => (job.name === "trigger" ? automationTrigger(job) : automationStep(job)),
+  { connection: createConnection(), concurrency, limiter: { max: rate, duration: 1000 } }
+);
+automationWorker.on("error", (e) => console.error("automation worker error", e));
+
+const sweeper = setInterval(() => {
+  sweepRuns().catch((e) => console.error("sweep failed", e));
+}, 60_000);
 
 const prepareWorker = new Worker(PREPARE_QUEUE, prepareCampaign, {
   connection: createConnection(),

@@ -91,6 +91,7 @@ const specs: Spec[] = [
       { key: "attempts", type: "int", default: 0 },
       { key: "openedAt", type: "datetime" },
       { key: "clickedAt", type: "datetime" },
+      { key: "stepIndex", type: "int" },
     ],
     indexes: [
       { key: "idx_account", type: "key", columns: ["accountId"] },
@@ -98,6 +99,7 @@ const specs: Spec[] = [
       { key: "idx_campaign_status", type: "key", columns: ["campaignId", "status"] },
       { key: "idx_opened", type: "key", columns: ["openedAt"] },
       { key: "idx_clicked", type: "key", columns: ["clickedAt"] },
+      { key: "idx_campaign_step", type: "key", columns: ["campaignId", "stepIndex"] },
     ],
   },
   {
@@ -158,6 +160,45 @@ const specs: Spec[] = [
     indexes: [
       { key: "uniq_domain", type: "unique", columns: ["domain"] },
       { key: "idx_account", type: "key", columns: ["accountId"] },
+    ],
+  },
+    {
+    id: "automations",
+    name: "automations",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "name", type: "varchar", size: 150, required: true },
+      { key: "status", type: "varchar", size: 10, default: "draft" }, // draft | active | paused
+      { key: "triggerType", type: "varchar", size: 20, required: true }, // list_joined | tag_added
+      { key: "triggerValue", type: "varchar", size: 100, required: true }, // list ID or tag
+      { key: "fromName", type: "varchar", size: 100 },
+      { key: "fromEmail", type: "varchar", size: 254, required: true },
+      { key: "steps", type: "text", required: true }, // JSON list of steps
+    ],
+    indexes: [
+      { key: "idx_account", type: "key", columns: ["accountId"] },
+      { key: "idx_status", type: "key", columns: ["status"] },
+      { key: "idx_trigger", type: "key", columns: ["accountId", "status", "triggerType", "triggerValue"] },
+    ],
+  },
+  {
+    id: "automation_runs",
+    name: "automation_runs",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "automationId", type: "varchar", size: 36, required: true },
+      { key: "contactId", type: "varchar", size: 36, required: true },
+      { key: "email", type: "varchar", size: 254 },
+      { key: "status", type: "varchar", size: 12, default: "active" }, // active | completed | exited
+      { key: "stepIndex", type: "int", default: 0 },
+      { key: "nextRunAt", type: "datetime" },
+      { key: "completedAt", type: "datetime" },
+      { key: "exitReason", type: "varchar", size: 60 },
+    ],
+    indexes: [
+      { key: "idx_account", type: "key", columns: ["accountId"] },
+      { key: "idx_auto_status", type: "key", columns: ["automationId", "status"] },
+      { key: "idx_auto_status_next", type: "key", columns: ["automationId", "status", "nextRunAt"] },
     ],
   },
 ];

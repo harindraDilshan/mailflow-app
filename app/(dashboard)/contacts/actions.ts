@@ -14,6 +14,7 @@ import {
   insertContact, countContacts, filterOwnedListIds, getOwnedContact,
   getOwnedList, listOwnedLists,
 } from "@/lib/contacts";
+import { fireContactTriggers } from "@/lib/automation-trigger";
 
 type State = { error?: string; message?: string } | undefined;
 
@@ -52,6 +53,9 @@ export async function updateContact(_: State, formData: FormData): Promise<State
   if (!contact) return { error: "Contact not found." };
 
   const listIds = await filterOwnedListIds(user.$id, formData.getAll("listIds").map(String));
+  const newTags = normalizeTags(String(formData.get("tags") ?? ""));
+  const addedLists = listIds.filter((id) => !(contact.listIds ?? []).includes(id));
+  const addedTags = newTags.filter((t) => !(contact.tags ?? []).includes(t));
 
   const { tablesDB } = createAdminClient();
   await tablesDB.updateRow({
@@ -60,10 +64,14 @@ export async function updateContact(_: State, formData: FormData): Promise<State
     rowId: contact.$id,
     data: {
       name: normalizeName(String(formData.get("name") ?? "")),
-      tags: normalizeTags(String(formData.get("tags") ?? "")),
+      tags: newTags,
       listIds,
     },
   });
+
+  if (contact.status === "active") {
+    await fireContactTriggers(user.$id, contact.$id, addedLists, addedTags);
+  }
 
   revalidatePath("/contacts");
   redirect("/contacts");
