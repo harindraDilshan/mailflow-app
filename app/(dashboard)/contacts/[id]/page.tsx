@@ -18,6 +18,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
       <p className="mb-6 text-sm text-gray-600">
         Status: <b>{contact.status}</b> · Source: {contact.source}
         {contact.consentAt && ` · Permission confirmed ${new Date(contact.consentAt).toLocaleDateString()}`}
+        {contact.consentUrl && ` · Signed up from ${contact.consentUrl}`}
       </p>
 
       <ContactForm
@@ -33,7 +34,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
         }}
       />
 
-      {contact.status === "active" ? (
+      {contact.status === "active" || contact.status === "pending" ? (
         <form action={deleteContact} className="mt-6">
           <input type="hidden" name="id" value={contact.$id} />
           <button className="rounded border px-4 py-2 text-sm">Delete contact</button>

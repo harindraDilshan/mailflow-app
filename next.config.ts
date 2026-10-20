@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
     },
   },
   serverExternalPackages: ["bullmq", "ioredis"],
+  allowedDevOrigins: ["*.trycloudflare.com", "*.ngrok-free.app", "*.ngrok-free.dev", "*.ngrok.app"],
 };
 
 export default nextConfig;

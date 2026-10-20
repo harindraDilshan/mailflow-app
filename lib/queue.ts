@@ -3,6 +3,7 @@ import IORedis from "ioredis";
 
 export const PREPARE_QUEUE = "prepare-campaign";
 export const EMAIL_QUEUE = "send-email";
+export const CONFIRM_QUEUE = "confirm-email";
 
 export function createConnection() {
   return new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
@@ -10,15 +11,16 @@ export function createConnection() {
   });
 }
 
-// Keep one set of queues, even when Next.js reloads files in development.
-const g = globalThis as unknown as { __queues?: { prepare: Queue; email: Queue } };
+type Queues = { prepare: Queue; email: Queue; confirm: Queue };
+const g = globalThis as unknown as { __queues?: Queues };
 
-export function getQueues() {
+export function getQueues(): Queues {
   if (!g.__queues) {
     const connection = createConnection();
     g.__queues = {
       prepare: new Queue(PREPARE_QUEUE, { connection }),
       email: new Queue(EMAIL_QUEUE, { connection }),
+      confirm: new Queue(CONFIRM_QUEUE, { connection }),
     };
   }
   return g.__queues;

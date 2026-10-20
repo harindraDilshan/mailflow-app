@@ -133,3 +133,20 @@ export async function reviewCampaign(accountId: string, c: CampaignRow) {
 
   return { audience, issues };
 }
+
+export async function senderDomainIssue(accountId: string, fromEmail: string) {
+  if (process.env.REQUIRE_VERIFIED_DOMAIN !== "true") return null;
+  const fromDomain = fromEmail.split("@")[1]?.toLowerCase() ?? "";
+  const { tablesDB } = createAdminClient();
+  const res = await tablesDB.listRows({
+    databaseId: DB_ID,
+    tableId: DOMAINS_TABLE,
+    queries: [
+      Query.equal("accountId", accountId),
+      Query.equal("domain", fromDomain),
+      Query.equal("status", "verified"),
+      Query.limit(1),
+    ],
+  });
+  return res.total === 0 ? `The domain ${fromDomain} is not verified yet.` : null;
+}

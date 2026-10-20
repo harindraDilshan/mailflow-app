@@ -22,7 +22,8 @@ export default async function ListsPage() {
             </Link>
             <form action={deleteList}>
               <input type="hidden" name="id" value={l.$id} />
-              <button className="text-sm underline">Delete</button>
+              <button className="text-sm underline">Delete </button>
+              <Link href={`/contacts/lists/${l.$id}/collect`} className="text-sm underline">Collect subscribers</Link>
             </form>
           </li>
         ))}
