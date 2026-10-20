@@ -16,9 +16,20 @@ export type ContactRow = {
   tags: string[];
   listIds: string[];
   consentAt: string | null;
+  consentUrl: string | null;
+  consentKeyId: string | null;
 };
 
-export type ListRow = { $id: string; accountId: string; name: string };
+export type ListRow = {
+  $id: string;
+  accountId: string;
+  name: string;
+  hostedEnabled?: boolean | null;
+  pageTitle?: string | null;
+  pageText?: string | null;
+  fromName?: string | null;
+  fromEmail?: string | null;
+};
 
 function isConflict(e: unknown) {
   return typeof e === "object" && e !== null && (e as { code?: number }).code === 409;

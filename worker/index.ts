@@ -1,8 +1,8 @@
 import { Worker } from "bullmq";
-import { createConnection, PREPARE_QUEUE, EMAIL_QUEUE } from "@/lib/queue";
-import {
-  prepareCampaign, sendEmail, markMessageFailed, finalizeCampaigns, markCampaignFailed,
-} from "./processors";
+import { createConnection, PREPARE_QUEUE, EMAIL_QUEUE, CONFIRM_QUEUE } from "@/lib/queue";
+import { prepareCampaign, sendEmail, sendConfirmation, markMessageFailed, 
+  finalizeCampaigns, markCampaignFailed } from "./processors";
+
 
 const rate = Number(process.env.SEND_RATE_PER_SECOND ?? 10);
 const concurrency = Number(process.env.SEND_CONCURRENCY ?? 5);
@@ -17,6 +17,14 @@ const emailWorker = new Worker(EMAIL_QUEUE, sendEmail, {
   concurrency,
   limiter: { max: rate, duration: 1000 }, // at most `rate` emails per second
 });
+
+const confirmWorker = new Worker(CONFIRM_QUEUE, sendConfirmation, {
+  connection: createConnection(),
+  concurrency: 3,
+  limiter: { max: rate, duration: 1000 },
+});
+
+confirmWorker.on("error", (e) => console.error("confirm worker error", e));
 
 // After the last retry, record the failure.
 emailWorker.on("failed", async (job, err) => {
@@ -40,7 +48,7 @@ console.log(`Worker running. Sending up to ${rate} emails/second, ${concurrency}
 
 async function shutdown() {
   console.log("Stopping... waiting for current jobs to finish.");
-  await Promise.all([prepareWorker.close(), emailWorker.close()]);
+  await Promise.all([prepareWorker.close(), emailWorker.close(), confirmWorker.close()]);
   process.exit(0);
 }
 process.on("SIGINT", shutdown);

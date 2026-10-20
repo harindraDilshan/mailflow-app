@@ -11,6 +11,7 @@ type Col =
   | { key: string; type: "varchar"; size: number; required?: boolean; default?: string; array?: boolean }
   | { key: string; type: "text"; required?: boolean }
   | { key: string; type: "int"; required?: boolean; default?: number }
+  | { key: string; type: "bool"; required?: boolean; default?: boolean }
   | { key: string; type: "datetime"; required?: boolean };
 type Idx = { key: string; type: "key" | "unique"; columns: string[] };
 type Spec = { id: string; name: string; columns: Col[]; indexes: Idx[] };
@@ -22,6 +23,11 @@ const specs: Spec[] = [
     columns: [
       { key: "accountId", type: "varchar", size: 36, required: true },
       { key: "name", type: "varchar", size: 100, required: true },
+      { key: "hostedEnabled", type: "bool", default: false },
+      { key: "pageTitle", type: "varchar", size: 120 },
+      { key: "pageText", type: "varchar", size: 500 },
+      { key: "fromName", type: "varchar", size: 100 },
+      { key: "fromEmail", type: "varchar", size: 254 },
     ],
     indexes: [{ key: "idx_account", type: "key", columns: ["accountId"] }],
   },
@@ -37,6 +43,9 @@ const specs: Spec[] = [
       { key: "tags", type: "varchar", size: 50, array: true },
       { key: "listIds", type: "varchar", size: 36, array: true },
       { key: "consentAt", type: "datetime" },
+      { key: "consentUrl", type: "varchar", size: 500 },
+      { key: "consentKeyId", type: "varchar", size: 36 },
+      { key: "confirmSentAt", type: "datetime" },
     ],
     indexes: [
       { key: "uniq_account_email", type: "unique", columns: ["accountId", "email"] },
@@ -111,6 +120,46 @@ const specs: Spec[] = [
       { key: "idx_campaign_type_url", type: "key", columns: ["campaignId", "type", "urlHash"] },
     ],
   },
+  {
+    id: "api_keys",
+    name: "api_keys",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "name", type: "varchar", size: 100, required: true },
+      { key: "type", type: "varchar", size: 10, required: true }, // public | secret
+      { key: "keyHash", type: "varchar", size: 64, required: true },
+      { key: "prefix", type: "varchar", size: 24, required: true },
+      { key: "publicKey", type: "varchar", size: 80 }, // only for public keys
+      { key: "listId", type: "varchar", size: 36 }, // public keys belong to one list
+      { key: "allowedOrigins", type: "varchar", size: 253, array: true },
+      { key: "status", type: "varchar", size: 10, default: "active" },
+      { key: "lastUsedAt", type: "datetime" },
+    ],
+    indexes: [
+      { key: "uniq_hash", type: "unique", columns: ["keyHash"] },
+      { key: "idx_account_list", type: "key", columns: ["accountId", "listId"] },
+    ],
+  },
+    {
+    id: "domains",
+    name: "domains",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "domain", type: "varchar", size: 253, required: true },
+      { key: "status", type: "varchar", size: 20, default: "pending" },
+      { key: "dkimStatus", type: "varchar", size: 30, default: "PENDING" },
+      { key: "dkimTokens", type: "varchar", size: 500, required: true },
+      { key: "mailFromDomain", type: "varchar", size: 253 },
+      { key: "spfOk", type: "bool", default: false },
+      { key: "dmarcOk", type: "bool", default: false },
+      { key: "lastCheckedAt", type: "datetime" },
+      { key: "verifiedAt", type: "datetime" },
+    ],
+    indexes: [
+      { key: "uniq_domain", type: "unique", columns: ["domain"] },
+      { key: "idx_account", type: "key", columns: ["accountId"] },
+    ],
+  },
 ];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -124,6 +173,8 @@ async function addColumn(tableId: string, c: Col) {
       return db.createTextColumn(base);
     case "int":
       return db.createIntegerColumn({ ...base, xdefault: c.default });
+    case "bool":
+      return db.createBooleanColumn({ ...base, xdefault: c.default });
     case "datetime":
       return db.createDatetimeColumn(base);
   }

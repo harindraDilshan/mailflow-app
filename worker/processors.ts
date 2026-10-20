@@ -1,16 +1,17 @@
 import type { Job } from "bullmq";
 import { Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/appwrite/admin";
-import { DB_ID, CONTACTS_TABLE, MESSAGES_TABLE, CAMPAIGNS_TABLE } from "@/lib/appwrite/db";
+import { DB_ID, CONTACTS_TABLE, MESSAGES_TABLE, CAMPAIGNS_TABLE, LISTS_TABLE } from "@/lib/appwrite/db";
 import {
   audienceQueries, countMessages, getCampaignById, messageIdFor,
   type CampaignRow, type MessageRow,
 } from "@/lib/campaigns";
 import { getQueues } from "@/lib/queue";
 import { getProvider } from "@/lib/email";
-import { renderEmail, htmlToText, cleanHeader } from "@/lib/email/render";
+import { renderEmail, htmlToText, cleanHeader, escapeHtml } from "@/lib/email/render";
 import { signToken } from "@/lib/unsubscribe-token";
 import { signClick, signOpen } from "@/lib/tracking-token";
+import { signConfirm } from "@/lib/confirm-token";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isConflict = (e: unknown) => (e as { code?: number })?.code === 409;
@@ -223,4 +224,49 @@ export async function markCampaignFailed(campaignId: string) {
   await tablesDB.updateRow({
     databaseId: DB_ID, tableId: CAMPAIGNS_TABLE, rowId: campaignId, data: { status: "failed" },
   });
+}
+
+export async function sendConfirmation(job: Job<{ contactId: string; listId: string }>) {
+  const { tablesDB } = createAdminClient();
+  const { contactId, listId } = job.data;
+
+  let contact: { email: string; status: string };
+  try {
+    contact = (await tablesDB.getRow({
+      databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: contactId,
+    })) as unknown as { email: string; status: string };
+  } catch (e) {
+    if (notFound(e)) return;
+    throw e;
+  }
+  if (contact.status !== "pending") return; // already confirmed, or blocked
+
+  let list: { name: string; pageTitle: string | null; fromName: string | null; fromEmail: string | null };
+  try {
+    list = (await tablesDB.getRow({
+      databaseId: DB_ID, tableId: LISTS_TABLE, rowId: listId,
+    })) as unknown as typeof list;
+  } catch (e) {
+    if (notFound(e)) return;
+    throw e;
+  }
+  if (!list.fromEmail) return;
+
+  const link = `${process.env.NEXT_PUBLIC_APP_URL}/confirm?t=${signConfirm(contactId)}`;
+  const title = list.pageTitle || list.name;
+  const html =
+    `<p>Please confirm that you want to receive emails: <b>${escapeHtml(title)}</b>.</p>` +
+    `<p><a href="${escapeHtml(link)}">Yes, confirm my subscription</a></p>` +
+    `<p style="font-size:12px;color:#666">If you did not sign up, ignore this email. You will not be subscribed.</p>`;
+
+  const fromName = cleanHeader(list.fromName ?? "");
+  const res = await getProvider().send({
+    to: contact.email,
+    from: fromName ? `${fromName} <${list.fromEmail}>` : list.fromEmail,
+    subject: cleanHeader(`Confirm your subscription: ${title}`),
+    html,
+    text: htmlToText(html),
+  });
+  if (!res.ok && res.retryable) throw new Error(res.error);
+  if (!res.ok) console.error("Confirmation email was rejected:", res.error);
 }

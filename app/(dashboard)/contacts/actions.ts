@@ -76,7 +76,7 @@ export async function deleteContact(formData: FormData): Promise<void> {
   if (!contact) return;
 
   // Unsubscribed, bounced, and complained contacts stay as a "do not email" memory.
-  if (contact.status !== "active") return;
+  if (contact.status !== "active" && contact.status !== "pending") return;
 
   const { tablesDB } = createAdminClient();
   await tablesDB.deleteRow({ databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: contact.$id });

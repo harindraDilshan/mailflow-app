@@ -4,7 +4,7 @@ export const MAX_CHUNK = 100;
 export const MAX_TAGS = 20;
 export const MAX_LISTS = 50;
 export const PAGE_SIZE = 25;
-export const STATUSES = ["active", "unsubscribed", "bounced", "complained"] as const;
+export const STATUSES = ["active", "pending", "unsubscribed", "bounced", "complained"] as const;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
