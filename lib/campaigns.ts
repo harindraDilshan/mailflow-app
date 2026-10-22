@@ -80,7 +80,7 @@ export async function countMessages(campaignId: string, status?: string) {
   return res.total;
 }
 
-async function countCreatedToday(accountId: string) {
+export async function countCreatedToday(accountId: string) {
   const { tablesDB } = createAdminClient();
   const start = new Date();
   start.setUTCHours(0, 0, 0, 0);

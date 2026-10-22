@@ -4,6 +4,7 @@ import IORedis from "ioredis";
 export const PREPARE_QUEUE = "prepare-campaign";
 export const EMAIL_QUEUE = "send-email";
 export const CONFIRM_QUEUE = "confirm-email";
+export const AUTOMATION_QUEUE = "automation";
 
 export function createConnection() {
   return new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
@@ -11,7 +12,7 @@ export function createConnection() {
   });
 }
 
-type Queues = { prepare: Queue; email: Queue; confirm: Queue };
+type Queues = { prepare: Queue; email: Queue; confirm: Queue; automation: Queue };
 const g = globalThis as unknown as { __queues?: Queues };
 
 export function getQueues(): Queues {
@@ -21,6 +22,7 @@ export function getQueues(): Queues {
       prepare: new Queue(PREPARE_QUEUE, { connection }),
       email: new Queue(EMAIL_QUEUE, { connection }),
       confirm: new Queue(CONFIRM_QUEUE, { connection }),
+      automation: new Queue(AUTOMATION_QUEUE, { connection }),
     };
   }
   return g.__queues;

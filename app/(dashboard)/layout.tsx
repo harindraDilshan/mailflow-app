@@ -21,6 +21,7 @@ async function DashboardShell({ children }: { children: React.ReactNode }) {
           <Link href="/contacts">Contacts</Link>
           <Link href="/domains">Domains</Link>
           <Link href="/campaigns">Campaigns</Link>
+          <Link href="/automations">Automations</Link>
         </nav>
         <div className="flex items-center gap-4">
           <span>{user.email}</span>

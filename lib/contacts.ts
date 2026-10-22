@@ -4,6 +4,7 @@ import { DB_ID, CONTACTS_TABLE, LISTS_TABLE } from "@/lib/appwrite/db";
 import {
   normalizeEmail, isValidEmail, normalizeName, normalizeTags, STATUSES, PAGE_SIZE,
 } from "@/lib/contact-rules";
+import { fireContactTriggers } from "@/lib/automation-trigger";
 
 export type ContactRow = {
   $id: string;
@@ -49,9 +50,10 @@ export async function insertContact(
   const email = normalizeEmail(c.email);
   if (!isValidEmail(email)) return "invalid";
 
+  const tags = normalizeTags(c.tags ?? []);
   const { tablesDB } = createAdminClient();
   try {
-    await tablesDB.createRow({
+    const row = await tablesDB.createRow({
       databaseId: DB_ID,
       tableId: CONTACTS_TABLE,
       rowId: ID.unique(),
@@ -61,12 +63,13 @@ export async function insertContact(
         name: normalizeName(c.name ?? ""),
         status: "active",
         source: c.source,
-        tags: normalizeTags(c.tags ?? []),
+        tags,
         listIds: c.listIds ?? [],
         ...(c.consent ? { consentAt: new Date().toISOString() } : {}),
       },
       permissions: [Permission.read(Role.user(accountId))],
     });
+    await fireContactTriggers(accountId, row.$id, c.listIds ?? [], tags);
     return "added";
   } catch (e) {
     if (isConflict(e)) return "exists";

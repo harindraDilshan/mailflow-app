@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/appwrite/admin";
 import { DB_ID, CONTACTS_TABLE } from "@/lib/appwrite/db";
 import { verifyConfirm } from "@/lib/confirm-token";
+import { fireContactTriggers } from "@/lib/automation-trigger";
 
 export async function confirmSubscription(formData: FormData): Promise<void> {
   const contactId = verifyConfirm(String(formData.get("t") ?? ""));
@@ -13,14 +14,14 @@ export async function confirmSubscription(formData: FormData): Promise<void> {
   try {
     const contact = (await tablesDB.getRow({
       databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: contactId,
-    })) as unknown as { status: string };
+    })) as unknown as { status: string; accountId: string; listIds: string[] | null; tags: string[] | null };
 
-    // Only "pending" can become "active". Blocked people stay blocked.
     if (contact.status === "pending") {
       await tablesDB.updateRow({
         databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: contactId,
         data: { status: "active", consentAt: new Date().toISOString() },
       });
+      await fireContactTriggers(contact.accountId, contactId, contact.listIds ?? [], contact.tags ?? []);
     }
   } catch {
     redirect("/confirm");
