@@ -180,6 +180,7 @@ export async function sendEmail(job: Job<{ messageId: string; campaignId: string
       "List-Unsubscribe": `<${oneClickUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
+    tags: { mid: messageId },
   });
 
   const attempts = job.attemptsMade + 1;

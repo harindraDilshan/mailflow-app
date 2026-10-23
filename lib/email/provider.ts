@@ -5,6 +5,7 @@ export type EmailMessage = {
   html: string;
   text?: string;
   headers?: Record<string, string>;
+  tags?: Record<string, string>;
 };
 
 export type SendResult =
