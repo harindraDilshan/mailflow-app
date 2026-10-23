@@ -1,5 +1,6 @@
 import type { EmailProvider } from "./provider";
 import { SmtpProvider } from "./smtp-provider";
+import { SesProvider } from "./ses-provider";
 
 let provider: EmailProvider | undefined;
 
@@ -10,7 +11,8 @@ export function getProvider(): EmailProvider {
       provider = new SmtpProvider();
       return provider;
     case "ses":
-      throw new Error("The SES provider is the next thing we build.");
+      provider = new SesProvider();
+      return provider;
     default:
       throw new Error("Unknown EMAIL_PROVIDER");
   }

@@ -233,6 +233,7 @@ export async function automationStep(job: Job<{ runId: string; stepIndex: number
       "List-Unsubscribe": `<${base}/api/unsubscribe?t=${token}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
+    tags: { mid: messageId },
   });
 
   if (res.ok) {

@@ -3,8 +3,9 @@ import { createConnection, PREPARE_QUEUE, EMAIL_QUEUE, CONFIRM_QUEUE, AUTOMATION
 import { prepareCampaign, sendEmail, sendConfirmation, markMessageFailed, 
   finalizeCampaigns, markCampaignFailed } from "./processors";
 import { automationTrigger, automationStep, sweepRuns } from "./automation";
+import { startSesEventConsumer } from "./ses-events";
 
-
+const stopSesEvents = startSesEventConsumer();
 const rate = Number(process.env.SEND_RATE_PER_SECOND ?? 10);
 const concurrency = Number(process.env.SEND_CONCURRENCY ?? 5);
 
@@ -63,6 +64,7 @@ console.log(`Worker running. Sending up to ${rate} emails/second, ${concurrency}
 async function shutdown() {
   console.log("Stopping... waiting for current jobs to finish.");
   await Promise.all([prepareWorker.close(), emailWorker.close(), confirmWorker.close()]);
+  stopSesEvents();
   process.exit(0);
 }
 process.on("SIGINT", shutdown);
