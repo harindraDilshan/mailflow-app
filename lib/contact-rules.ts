@@ -20,6 +20,10 @@ export function normalizeName(input: string) {
   return input.trim().replace(/\s+/g, " ").slice(0, 200);
 }
 
+export function normalizeNote(input: string) {
+  return input.trim().slice(0, 2000);
+}
+
 // Accepts "vip, News" or ["vip", "News"]. Returns clean, unique, lowercase tags.
 export function normalizeTags(input: string | string[]): string[] {
   const parts = Array.isArray(input) ? input : input.split(",");

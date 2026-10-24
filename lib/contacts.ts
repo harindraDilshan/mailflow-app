@@ -2,7 +2,7 @@ import { ID, Permission, Role, Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/appwrite/server";
 import { DB_ID, CONTACTS_TABLE, LISTS_TABLE } from "@/lib/appwrite/db";
 import {
-  normalizeEmail, isValidEmail, normalizeName, normalizeTags, STATUSES, PAGE_SIZE, MAX_CONTACTS,
+  normalizeEmail, isValidEmail, normalizeName, normalizeNote, normalizeTags, STATUSES, PAGE_SIZE, MAX_CONTACTS,
 } from "@/lib/contact-rules";
 import { fireContactTriggers } from "@/lib/automation-trigger";
 
@@ -19,6 +19,7 @@ export type ContactRow = {
   consentAt: string | null;
   consentUrl: string | null;
   consentKeyId: string | null;
+  note?: string | null;
 };
 
 export type ListRow = {
@@ -45,6 +46,7 @@ export async function insertContact(
     listIds?: string[];
     source: "manual" | "import";
     consent?: boolean;
+    note?: string;
   }
 ): Promise<"added" | "exists" | "invalid"> {
   const email = normalizeEmail(c.email);
@@ -66,6 +68,7 @@ export async function insertContact(
         tags,
         listIds: c.listIds ?? [],
         ...(c.consent ? { consentAt: new Date().toISOString() } : {}),
+        ...(c.note ? { note: normalizeNote(c.note) } : {}),
       },
       permissions: [Permission.read(Role.user(accountId))],
     });

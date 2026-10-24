@@ -269,6 +269,14 @@ export function ContactsTable({
                     <Link href={`/contacts/${c.$id}`} className="underline">
                       {c.email}
                     </Link>
+                    {c.note && (
+                      <span
+                        title={c.note}
+                        className="ml-1.5 inline-block cursor-help text-xs text-gray-500"
+                      >
+                        [note]
+                      </span>
+                    )}
                   </td>
                   <td className="p-2">{c.name}</td>
                   <td className="p-2">{c.status}</td>

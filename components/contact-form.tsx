@@ -13,7 +13,7 @@ export function ContactForm({
   action: (state: State, formData: FormData) => Promise<State>;
   lists: { id: string; name: string }[];
   submitLabel: string;
-  contact?: { id: string; email: string; name: string; tags: string[]; listIds: string[] };
+  contact?: { id: string; email: string; name: string; tags: string[]; listIds: string[]; note?: string };
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
 
@@ -44,6 +44,20 @@ export function ContactForm({
           id="tags" name="tags" placeholder="vip, newsletter"
           defaultValue={contact?.tags.join(", ")}
           className="w-full rounded border px-3 py-2"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="note" className="mb-1 block text-sm">
+          Private note <span className="text-xs text-gray-500">(only visible to you)</span>
+        </label>
+        <textarea
+          id="note"
+          name="note"
+          rows={3}
+          placeholder="Add a private note about this contact"
+          defaultValue={contact?.note ?? ""}
+          className="w-full rounded border px-3 py-2 text-sm"
         />
       </div>
 

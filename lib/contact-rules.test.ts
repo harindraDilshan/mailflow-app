@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { normalizeEmail, isValidEmail, normalizeTags, STATUSES } from "./contact-rules";
+import { normalizeEmail, isValidEmail, normalizeTags, normalizeNote, STATUSES } from "./contact-rules";
 
 it("cleans and checks emails", () => {
   expect(normalizeEmail("  John@Shop.COM ")).toBe("john@shop.com");
@@ -15,4 +15,9 @@ it("cleans tags", () => {
 
 it("includes archived in statuses", () => {
   expect(STATUSES).toContain("archived");
+});
+
+it("cleans private notes", () => {
+  expect(normalizeNote("  VIP customer note  ")).toBe("VIP customer note");
+  expect(normalizeNote("a".repeat(2500)).length).toBe(2000);
 });

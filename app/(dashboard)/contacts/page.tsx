@@ -53,6 +53,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
     consentAt: c.consentAt,
     consentUrl: c.consentUrl,
     consentKeyId: c.consentKeyId,
+    note: c.note ?? null,
   }));
 
   return (
