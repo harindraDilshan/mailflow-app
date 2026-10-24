@@ -46,6 +46,7 @@ const specs: Spec[] = [
       { key: "consentUrl", type: "varchar", size: 500 },
       { key: "consentKeyId", type: "varchar", size: 36 },
       { key: "confirmSentAt", type: "datetime" },
+      { key: "note", type: "text" },
     ],
     indexes: [
       { key: "uniq_account_email", type: "unique", columns: ["accountId", "email"] },

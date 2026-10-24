@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/appwrite/server";
 import { DB_ID, CONTACTS_TABLE, LISTS_TABLE } from "@/lib/appwrite/db";
 import {
-  normalizeEmail, isValidEmail, normalizeName, normalizeTags,
+  normalizeEmail, isValidEmail, normalizeName, normalizeNote, normalizeTags,
   MAX_CONTACTS, MAX_CHUNK, MAX_LISTS, PAGE_SIZE,
 } from "@/lib/contact-rules";
 import {
@@ -30,6 +30,7 @@ export async function addContact(_: State, formData: FormData): Promise<State> {
   }
 
   const listIds = await filterOwnedListIds(user.$id, formData.getAll("listIds").map(String));
+  const note = normalizeNote(String(formData.get("note") ?? ""));
 
   const result = await insertContact(user.$id, {
     email,
@@ -37,6 +38,7 @@ export async function addContact(_: State, formData: FormData): Promise<State> {
     tags: normalizeTags(String(formData.get("tags") ?? "")),
     listIds,
     source: "manual",
+    note: note || undefined,
   });
 
   if (result === "exists") return { error: "This contact already exists." };
@@ -46,7 +48,7 @@ export async function addContact(_: State, formData: FormData): Promise<State> {
   redirect("/contacts");
 }
 
-// ---------- Edit a contact (name, tags, lists only) ----------
+// ---------- Edit a contact (name, tags, lists, note) ----------
 export async function updateContact(_: State, formData: FormData): Promise<State> {
   const user = await requireUser();
   const contact = await getOwnedContact(user.$id, String(formData.get("id") ?? ""));
@@ -54,6 +56,7 @@ export async function updateContact(_: State, formData: FormData): Promise<State
 
   const listIds = await filterOwnedListIds(user.$id, formData.getAll("listIds").map(String));
   const newTags = normalizeTags(String(formData.get("tags") ?? ""));
+  const note = normalizeNote(String(formData.get("note") ?? ""));
   const addedLists = listIds.filter((id) => !(contact.listIds ?? []).includes(id));
   const addedTags = newTags.filter((t) => !(contact.tags ?? []).includes(t));
 
@@ -66,6 +69,7 @@ export async function updateContact(_: State, formData: FormData): Promise<State
       name: normalizeName(String(formData.get("name") ?? "")),
       tags: newTags,
       listIds,
+      note,
     },
   });
 

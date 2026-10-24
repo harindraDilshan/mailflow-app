@@ -32,6 +32,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
           name: contact.name ?? "",
           tags: contact.tags ?? [],
           listIds: contact.listIds ?? [],
+          note: contact.note ?? "",
         }}
       />
 
