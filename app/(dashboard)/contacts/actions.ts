@@ -1,6 +1,6 @@
 "use server";
 
-import { ID, Permission, Role } from "node-appwrite";
+import { ID, Permission, Role, Query } from "node-appwrite";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
@@ -8,11 +8,11 @@ import { createAdminClient } from "@/lib/appwrite/server";
 import { DB_ID, CONTACTS_TABLE, LISTS_TABLE } from "@/lib/appwrite/db";
 import {
   normalizeEmail, isValidEmail, normalizeName, normalizeTags,
-  MAX_CONTACTS, MAX_CHUNK, MAX_LISTS,
+  MAX_CONTACTS, MAX_CHUNK, MAX_LISTS, PAGE_SIZE,
 } from "@/lib/contact-rules";
 import {
   insertContact, countContacts, filterOwnedListIds, getOwnedContact,
-  getOwnedList, listOwnedLists,
+  getOwnedList, listOwnedLists, ContactRow, fetchAllMatchingContacts,
 } from "@/lib/contacts";
 import { fireContactTriggers } from "@/lib/automation-trigger";
 
@@ -77,7 +77,7 @@ export async function updateContact(_: State, formData: FormData): Promise<State
   redirect("/contacts");
 }
 
-// ---------- Delete (only active contacts) ----------
+// ---------- Delete one contact (only active or pending) ----------
 export async function deleteContact(formData: FormData): Promise<void> {
   const user = await requireUser();
   const contact = await getOwnedContact(user.$id, String(formData.get("id") ?? ""));
@@ -88,6 +88,77 @@ export async function deleteContact(formData: FormData): Promise<void> {
 
   const { tablesDB } = createAdminClient();
   await tablesDB.deleteRow({ databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: contact.$id });
+
+  revalidatePath("/contacts");
+  redirect("/contacts");
+}
+
+// ---------- Bulk delete contacts by ID (current page selection) ----------
+export async function bulkDeleteContacts(formData: FormData): Promise<void> {
+  const user = await requireUser();
+
+  // Deduplicate and cap at PAGE_SIZE to match what the UI can ever show at once.
+  const ids = [...new Set(formData.getAll("ids").map(String).filter(Boolean))].slice(0, PAGE_SIZE);
+  if (ids.length === 0) return;
+
+  const { tablesDB } = createAdminClient();
+
+  // One query to fetch all requested rows that belong to this account.
+  const res = await tablesDB.listRows({
+    databaseId: DB_ID,
+    tableId: CONTACTS_TABLE,
+    queries: [
+      Query.equal("accountId", user.$id),
+      Query.equal("$id", ids),
+      Query.limit(ids.length),
+    ],
+  });
+
+  const toDelete = (res.rows as unknown as ContactRow[]).filter(
+    (c) => c.status === "active" || c.status === "pending"
+  );
+
+  await Promise.all(
+    toDelete.map((c) =>
+      tablesDB.deleteRow({ databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: c.$id })
+    )
+  );
+
+  revalidatePath("/contacts");
+  redirect("/contacts");
+}
+
+// ---------- Delete all contacts matching the current filter set ----------
+export async function deleteAllMatchingContacts(formData: FormData): Promise<void> {
+  const user = await requireUser();
+
+  const filters = {
+    q:      (formData.get("q")      as string) || undefined,
+    status: (formData.get("status") as string) || undefined,
+    listId: (formData.get("listId") as string) || undefined,
+    tag:    (formData.get("tag")    as string) || undefined,
+    from:   (formData.get("from")   as string) || undefined,
+    to:     (formData.get("to")     as string) || undefined,
+  };
+
+  // Fetch every contact that matches the filters (bounded by MAX_CONTACTS).
+  const all = await fetchAllMatchingContacts(user.$id, filters);
+
+  // Server-side guard: never delete protected contacts regardless of filters.
+  const toDelete = all.filter(
+    (c) => c.status === "active" || c.status === "pending"
+  );
+
+  const { tablesDB } = createAdminClient();
+
+  // Delete in batches of 25 to stay gentle on the database.
+  for (let i = 0; i < toDelete.length; i += 25) {
+    await Promise.all(
+      toDelete.slice(i, i + 25).map((c) =>
+        tablesDB.deleteRow({ databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: c.$id })
+      )
+    );
+  }
 
   revalidatePath("/contacts");
   redirect("/contacts");

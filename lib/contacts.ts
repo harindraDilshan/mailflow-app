@@ -2,7 +2,7 @@ import { ID, Permission, Role, Query } from "node-appwrite";
 import { createAdminClient } from "@/lib/appwrite/server";
 import { DB_ID, CONTACTS_TABLE, LISTS_TABLE } from "@/lib/appwrite/db";
 import {
-  normalizeEmail, isValidEmail, normalizeName, normalizeTags, STATUSES, PAGE_SIZE,
+  normalizeEmail, isValidEmail, normalizeName, normalizeTags, STATUSES, PAGE_SIZE, MAX_CONTACTS,
 } from "@/lib/contact-rules";
 import { fireContactTriggers } from "@/lib/automation-trigger";
 
@@ -155,20 +155,24 @@ export type ContactFilters = {
   listId?: string;
   tag?: string;
   from?: string; // YYYY-MM-DD
-  to?: string; // YYYY-MM-DD
+  to?: string;   // YYYY-MM-DD
   page: number;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-export async function searchContacts(accountId: string, f: ContactFilters) {
+/**
+ * Builds the Appwrite query array for the given filters (without pagination).
+ * Shared by searchContacts and deleteAllMatchingContacts.
+ */
+export function buildContactSearchQueries(
+  accountId: string,
+  f: Omit<ContactFilters, "page">
+): string[] {
   const queries = [Query.equal("accountId", accountId)];
-
   const q = f.q?.trim();
   if (q) {
-    queries.push(
-      Query.or([Query.contains("email", q.toLowerCase()), Query.contains("name", q)])
-    );
+    queries.push(Query.or([Query.contains("email", q.toLowerCase()), Query.contains("name", q)]));
   }
   if (f.status && (STATUSES as readonly string[]).includes(f.status)) {
     queries.push(Query.equal("status", f.status));
@@ -181,7 +185,11 @@ export async function searchContacts(accountId: string, f: ContactFilters) {
   if (f.to && DATE_RE.test(f.to)) {
     queries.push(Query.lessThanEqual("$createdAt", `${f.to}T23:59:59.999Z`));
   }
+  return queries;
+}
 
+export async function searchContacts(accountId: string, f: ContactFilters) {
+  const queries = buildContactSearchQueries(accountId, f);
   queries.push(
     Query.orderDesc("$createdAt"),
     Query.limit(PAGE_SIZE),
@@ -191,4 +199,21 @@ export async function searchContacts(accountId: string, f: ContactFilters) {
   const { tablesDB } = createAdminClient();
   const res = await tablesDB.listRows({ databaseId: DB_ID, tableId: CONTACTS_TABLE, queries });
   return { rows: res.rows as unknown as ContactRow[], total: res.total };
+}
+
+/**
+ * Fetches every contact matching the given filters (no pagination cap).
+ * Used by the "delete all matching" server action.
+ */
+export async function fetchAllMatchingContacts(
+  accountId: string,
+  f: Omit<ContactFilters, "page">
+): Promise<ContactRow[]> {
+  const queries = buildContactSearchQueries(accountId, f);
+  // MAX_CONTACTS is the hard ceiling for any account, so this is always bounded.
+  queries.push(Query.limit(MAX_CONTACTS));
+
+  const { tablesDB } = createAdminClient();
+  const res = await tablesDB.listRows({ databaseId: DB_ID, tableId: CONTACTS_TABLE, queries });
+  return res.rows as unknown as ContactRow[];
 }
