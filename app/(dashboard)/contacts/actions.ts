@@ -77,17 +77,151 @@ export async function updateContact(_: State, formData: FormData): Promise<State
   redirect("/contacts");
 }
 
-// ---------- Delete one contact (only active or pending) ----------
+// ---------- Archive one contact ----------
+export async function archiveContact(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const contact = await getOwnedContact(user.$id, String(formData.get("id") ?? ""));
+  if (!contact) return;
+
+  // Unsubscribed, bounced, and complained contacts stay as suppression records.
+  if (contact.status !== "active" && contact.status !== "pending") return;
+
+  const { tablesDB } = createAdminClient();
+  await tablesDB.updateRow({
+    databaseId: DB_ID,
+    tableId: CONTACTS_TABLE,
+    rowId: contact.$id,
+    data: { status: "archived" },
+  });
+
+  revalidatePath("/contacts");
+  revalidatePath(`/contacts/${contact.$id}`);
+  redirect(`/contacts/${contact.$id}`);
+}
+
+// ---------- Unarchive one contact ----------
+export async function unarchiveContact(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const contact = await getOwnedContact(user.$id, String(formData.get("id") ?? ""));
+  if (!contact) return;
+
+  if (contact.status !== "archived") return;
+
+  // Billing check: unarchiving brings the contact back into the billing count
+  if ((await countContacts(user.$id)) >= MAX_CONTACTS) {
+    return;
+  }
+
+  const { tablesDB } = createAdminClient();
+  await tablesDB.updateRow({
+    databaseId: DB_ID,
+    tableId: CONTACTS_TABLE,
+    rowId: contact.$id,
+    data: { status: "active" },
+  });
+
+  revalidatePath("/contacts");
+  revalidatePath(`/contacts/${contact.$id}`);
+  redirect(`/contacts/${contact.$id}`);
+}
+
+// ---------- Delete one contact (active, pending, or archived) ----------
 export async function deleteContact(formData: FormData): Promise<void> {
   const user = await requireUser();
   const contact = await getOwnedContact(user.$id, String(formData.get("id") ?? ""));
   if (!contact) return;
 
   // Unsubscribed, bounced, and complained contacts stay as a "do not email" memory.
-  if (contact.status !== "active" && contact.status !== "pending") return;
+  if (contact.status !== "active" && contact.status !== "pending" && contact.status !== "archived") return;
 
   const { tablesDB } = createAdminClient();
   await tablesDB.deleteRow({ databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: contact.$id });
+
+  revalidatePath("/contacts");
+  redirect("/contacts");
+}
+
+// ---------- Bulk archive contacts by ID (current page selection) ----------
+export async function bulkArchiveContacts(formData: FormData): Promise<void> {
+  const user = await requireUser();
+
+  const ids = [...new Set(formData.getAll("ids").map(String).filter(Boolean))].slice(0, PAGE_SIZE);
+  if (ids.length === 0) return;
+
+  const { tablesDB } = createAdminClient();
+
+  const res = await tablesDB.listRows({
+    databaseId: DB_ID,
+    tableId: CONTACTS_TABLE,
+    queries: [
+      Query.equal("accountId", user.$id),
+      Query.equal("$id", ids),
+      Query.limit(ids.length),
+    ],
+  });
+
+  const toArchive = (res.rows as unknown as ContactRow[]).filter(
+    (c) => c.status === "active" || c.status === "pending"
+  );
+
+  await Promise.all(
+    toArchive.map((c) =>
+      tablesDB.updateRow({
+        databaseId: DB_ID,
+        tableId: CONTACTS_TABLE,
+        rowId: c.$id,
+        data: { status: "archived" },
+      })
+    )
+  );
+
+  revalidatePath("/contacts");
+  redirect("/contacts");
+}
+
+// ---------- Bulk unarchive contacts by ID (current page selection) ----------
+export async function bulkUnarchiveContacts(formData: FormData): Promise<void> {
+  const user = await requireUser();
+
+  const ids = [...new Set(formData.getAll("ids").map(String).filter(Boolean))].slice(0, PAGE_SIZE);
+  if (ids.length === 0) return;
+
+  const { tablesDB } = createAdminClient();
+
+  const res = await tablesDB.listRows({
+    databaseId: DB_ID,
+    tableId: CONTACTS_TABLE,
+    queries: [
+      Query.equal("accountId", user.$id),
+      Query.equal("$id", ids),
+      Query.limit(ids.length),
+    ],
+  });
+
+  const toUnarchive = (res.rows as unknown as ContactRow[]).filter(
+    (c) => c.status === "archived"
+  );
+
+  if (toUnarchive.length === 0) return;
+
+  // Check how many active contacts the account can still accommodate
+  const currentCount = await countContacts(user.$id);
+  const remaining = Math.max(0, MAX_CONTACTS - currentCount);
+
+  // Only unarchive up to the billing limit
+  const allowed = toUnarchive.slice(0, remaining);
+  if (allowed.length === 0) return;
+
+  await Promise.all(
+    allowed.map((c) =>
+      tablesDB.updateRow({
+        databaseId: DB_ID,
+        tableId: CONTACTS_TABLE,
+        rowId: c.$id,
+        data: { status: "active" },
+      })
+    )
+  );
 
   revalidatePath("/contacts");
   redirect("/contacts");
@@ -115,7 +249,7 @@ export async function bulkDeleteContacts(formData: FormData): Promise<void> {
   });
 
   const toDelete = (res.rows as unknown as ContactRow[]).filter(
-    (c) => c.status === "active" || c.status === "pending"
+    (c) => c.status === "active" || c.status === "pending" || c.status === "archived"
   );
 
   await Promise.all(
@@ -146,7 +280,7 @@ export async function deleteAllMatchingContacts(formData: FormData): Promise<voi
 
   // Server-side guard: never delete protected contacts regardless of filters.
   const toDelete = all.filter(
-    (c) => c.status === "active" || c.status === "pending"
+    (c) => c.status === "active" || c.status === "pending" || c.status === "archived"
   );
 
   const { tablesDB } = createAdminClient();

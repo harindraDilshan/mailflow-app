@@ -3,7 +3,7 @@ import { ContactForm } from "@/components/contact-form";
 import { DeleteContactButton } from "@/components/delete-contact-button";
 import { requireUser } from "@/lib/auth";
 import { getOwnedContact, listOwnedLists } from "@/lib/contacts";
-import { updateContact, deleteContact } from "../actions";
+import { updateContact, deleteContact, archiveContact, unarchiveContact } from "../actions";
 
 export default async function ContactPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -35,13 +35,33 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
         }}
       />
 
-      {contact.status === "active" || contact.status === "pending" ? (
-        <DeleteContactButton action={deleteContact} contactId={contact.$id} />
-      ) : (
-        <p className="mt-6 text-xs text-gray-500">
-          This contact cannot be deleted. It stays on your account so we never email them again.
-        </p>
-      )}
+      <div className="mt-6 flex items-center gap-3">
+        {contact.status === "active" || contact.status === "pending" ? (
+          <>
+            <form action={archiveContact}>
+              <input type="hidden" name="id" value={contact.$id} />
+              <button className="rounded border px-4 py-2 text-sm hover:bg-gray-50">
+                Archive contact
+              </button>
+            </form>
+            <DeleteContactButton action={deleteContact} contactId={contact.$id} />
+          </>
+        ) : contact.status === "archived" ? (
+          <>
+            <form action={unarchiveContact}>
+              <input type="hidden" name="id" value={contact.$id} />
+              <button className="rounded border px-4 py-2 text-sm hover:bg-gray-50">
+                Unarchive contact
+              </button>
+            </form>
+            <DeleteContactButton action={deleteContact} contactId={contact.$id} />
+          </>
+        ) : (
+          <p className="text-xs text-gray-500">
+            This contact cannot be deleted. It stays on your account so we never email them again.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

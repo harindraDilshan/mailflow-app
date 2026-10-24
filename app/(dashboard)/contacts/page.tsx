@@ -3,7 +3,12 @@ import { requireUser } from "@/lib/auth";
 import { listOwnedLists, searchContacts } from "@/lib/contacts";
 import { PAGE_SIZE, STATUSES } from "@/lib/contact-rules";
 import { ContactsTable } from "./contacts-table";
-import { bulkDeleteContacts, deleteAllMatchingContacts } from "./actions";
+import {
+  bulkDeleteContacts,
+  deleteAllMatchingContacts,
+  bulkArchiveContacts,
+  bulkUnarchiveContacts,
+} from "./actions";
 
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -85,6 +90,8 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
         filters={sp}
         bulkDeleteAction={bulkDeleteContacts}
         deleteAllAction={deleteAllMatchingContacts}
+        bulkArchiveAction={bulkArchiveContacts}
+        bulkUnarchiveAction={bulkUnarchiveContacts}
       />
 
       <div className="mt-4 flex items-center gap-4 text-sm">
