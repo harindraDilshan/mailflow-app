@@ -82,7 +82,11 @@ export async function countContacts(accountId: string) {
   const res = await tablesDB.listRows({
     databaseId: DB_ID,
     tableId: CONTACTS_TABLE,
-    queries: [Query.equal("accountId", accountId), Query.limit(1)],
+    queries: [
+      Query.equal("accountId", accountId),
+      Query.notEqual("status", "archived"),
+      Query.limit(1),
+    ],
   });
   return res.total;
 }
@@ -92,7 +96,12 @@ export async function countContactsInList(accountId: string, listId: string) {
   const res = await tablesDB.listRows({
     databaseId: DB_ID,
     tableId: CONTACTS_TABLE,
-    queries: [Query.equal("accountId", accountId), Query.contains("listIds", listId), Query.limit(1)],
+    queries: [
+      Query.equal("accountId", accountId),
+      Query.contains("listIds", listId),
+      Query.notEqual("status", "archived"),
+      Query.limit(1),
+    ],
   });
   return res.total;
 }

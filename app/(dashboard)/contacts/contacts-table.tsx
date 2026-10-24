@@ -20,6 +20,8 @@ export function ContactsTable({
   filters,
   bulkDeleteAction,
   deleteAllAction,
+  bulkArchiveAction,
+  bulkUnarchiveAction,
 }: {
   rows: ContactRow[];
   lists: { id: string; name: string }[];
@@ -27,11 +29,17 @@ export function ContactsTable({
   filters: Filters;
   bulkDeleteAction: (formData: FormData) => Promise<void>;
   deleteAllAction: (formData: FormData) => Promise<void>;
+  bulkArchiveAction?: (formData: FormData) => Promise<void>;
+  bulkUnarchiveAction?: (formData: FormData) => Promise<void>;
 }) {
   const listName = new Map(lists.map((l) => [l.id, l.name]));
 
   // Form ref for ID-based bulk delete (current-page selection).
-  const bulkFormRef = useRef<HTMLFormElement>(null);
+  const bulkDeleteFormRef = useRef<HTMLFormElement>(null);
+  // Form ref for ID-based bulk archive (current-page selection).
+  const bulkArchiveFormRef = useRef<HTMLFormElement>(null);
+  // Form ref for ID-based bulk unarchive (current-page selection).
+  const bulkUnarchiveFormRef = useRef<HTMLFormElement>(null);
   // Form ref for filter-based delete (all matching contacts).
   const allFormRef = useRef<HTMLFormElement>(null);
 
@@ -39,14 +47,14 @@ export function ContactsTable({
   // True when the user has opted in to "select all matching contacts" mode.
   const [selectAllMode, setSelectAllMode] = useState(false);
 
-  // Only active and pending contacts can be deleted.
-  const deletable = rows.filter(
-    (c) => c.status === "active" || c.status === "pending"
+  // Active, pending, and archived contacts can be deleted or managed.
+  const selectable = rows.filter(
+    (c) => c.status === "active" || c.status === "pending" || c.status === "archived"
   );
   const allPageSelected =
-    deletable.length > 0 && deletable.every((c) => selected.has(c.$id));
+    selectable.length > 0 && selectable.every((c) => selected.has(c.$id));
 
-  // Show the cross-page "Select all N" prompt only when every deletable contact
+  // Show the cross-page "Select all N" prompt only when every selectable contact
   // on this page is checked AND there are more contacts beyond this page.
   const showSelectAllPrompt = allPageSelected && !selectAllMode && total > rows.length;
 
@@ -54,7 +62,7 @@ export function ContactsTable({
     // Changing the page selection always exits select-all mode.
     setSelectAllMode(false);
     setSelected(
-      allPageSelected ? new Set() : new Set(deletable.map((c) => c.$id))
+      allPageSelected ? new Set() : new Set(selectable.map((c) => c.$id))
     );
   }
 
@@ -77,7 +85,23 @@ export function ContactsTable({
     if (selected.size === 0) return;
     const noun = selected.size === 1 ? "contact" : "contacts";
     if (!confirm(`Delete ${selected.size} ${noun}? This action cannot be undone.`)) return;
-    bulkFormRef.current?.requestSubmit();
+    bulkDeleteFormRef.current?.requestSubmit();
+  }
+
+  // Confirm + submit the ID-based bulk archive form.
+  function handleBulkArchive() {
+    if (selected.size === 0) return;
+    const noun = selected.size === 1 ? "contact" : "contacts";
+    if (!confirm(`Archive ${selected.size} ${noun}?`)) return;
+    bulkArchiveFormRef.current?.requestSubmit();
+  }
+
+  // Confirm + submit the ID-based bulk unarchive form.
+  function handleBulkUnarchive() {
+    if (selected.size === 0) return;
+    const noun = selected.size === 1 ? "contact" : "contacts";
+    if (!confirm(`Unarchive ${selected.size} ${noun}?`)) return;
+    bulkUnarchiveFormRef.current?.requestSubmit();
   }
 
   // Confirm + submit the filter-based delete-all form.
@@ -86,14 +110,46 @@ export function ContactsTable({
     allFormRef.current?.requestSubmit();
   }
 
+  const hasArchivedSelected = rows.some(
+    (c) => selected.has(c.$id) && c.status === "archived"
+  );
+  const hasActiveOrPendingSelected = rows.some(
+    (c) => selected.has(c.$id) && (c.status === "active" || c.status === "pending")
+  );
+
+  const showArchive =
+    bulkArchiveAction &&
+    (hasActiveOrPendingSelected || (!hasArchivedSelected && !hasActiveOrPendingSelected));
+  const showUnarchive =
+    bulkUnarchiveAction &&
+    (hasArchivedSelected || (!hasArchivedSelected && !hasActiveOrPendingSelected));
+
   return (
     <>
       {/* ── ID-based bulk delete form (current page selection) ── */}
-      <form ref={bulkFormRef} action={bulkDeleteAction}>
+      <form ref={bulkDeleteFormRef} action={bulkDeleteAction}>
         {[...selected].map((id) => (
           <input key={id} type="hidden" name="ids" value={id} />
         ))}
       </form>
+
+      {/* ── ID-based bulk archive form (current page selection) ── */}
+      {bulkArchiveAction && (
+        <form ref={bulkArchiveFormRef} action={bulkArchiveAction}>
+          {[...selected].map((id) => (
+            <input key={id} type="hidden" name="ids" value={id} />
+          ))}
+        </form>
+      )}
+
+      {/* ── ID-based bulk unarchive form (current page selection) ── */}
+      {bulkUnarchiveAction && (
+        <form ref={bulkUnarchiveFormRef} action={bulkUnarchiveAction}>
+          {[...selected].map((id) => (
+            <input key={id} type="hidden" name="ids" value={id} />
+          ))}
+        </form>
+      )}
 
       {/* ── Filter-based delete-all form (all matching contacts) ── */}
       <form ref={allFormRef} action={deleteAllAction} className="hidden">
@@ -123,6 +179,24 @@ export function ContactsTable({
       ) : selected.size > 0 ? (
         <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
           <span className="text-gray-700">{selected.size} selected</span>
+          {showArchive && (
+            <button
+              type="button"
+              onClick={handleBulkArchive}
+              className="rounded border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-50"
+            >
+              Archive selected
+            </button>
+          )}
+          {showUnarchive && (
+            <button
+              type="button"
+              onClick={handleBulkUnarchive}
+              className="rounded border border-gray-300 px-3 py-1 text-gray-700 hover:bg-gray-50"
+            >
+              Unarchive selected
+            </button>
+          )}
           <button
             type="button"
             onClick={handleBulkDelete}
@@ -130,7 +204,7 @@ export function ContactsTable({
           >
             Delete selected
           </button>
-          {/* Cross-page prompt: shown only when all deletable contacts on this
+          {/* Cross-page prompt: shown only when all selectable contacts on this
               page are checked and further pages exist. */}
           {showSelectAllPrompt && (
             <span className="text-gray-500">
@@ -157,7 +231,7 @@ export function ContactsTable({
                   type="checkbox"
                   checked={allPageSelected}
                   onChange={toggleAll}
-                  disabled={deletable.length === 0}
+                  disabled={selectable.length === 0}
                   aria-label="Select all on this page"
                 />
               </th>
@@ -178,11 +252,11 @@ export function ContactsTable({
               </tr>
             )}
             {rows.map((c) => {
-              const canDelete = c.status === "active" || c.status === "pending";
+              const canSelect = c.status === "active" || c.status === "pending" || c.status === "archived";
               return (
                 <tr key={c.$id} className="border-t">
                   <td className="p-2">
-                    {canDelete && (
+                    {canSelect && (
                       <input
                         type="checkbox"
                         checked={selected.has(c.$id) || selectAllMode}

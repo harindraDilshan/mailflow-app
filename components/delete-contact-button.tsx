@@ -5,9 +5,11 @@ import { useRef } from "react";
 export function DeleteContactButton({
   action,
   contactId,
+  className,
 }: {
   action: (formData: FormData) => Promise<void>;
   contactId: string;
+  className?: string;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -18,7 +20,7 @@ export function DeleteContactButton({
   }
 
   return (
-    <form ref={formRef} action={action} className="mt-6">
+    <form ref={formRef} action={action} className={className}>
       <input type="hidden" name="id" value={contactId} />
       <button
         type="button"
