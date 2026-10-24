@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { ContactForm } from "@/components/contact-form";
+import { DeleteContactButton } from "@/components/delete-contact-button";
 import { requireUser } from "@/lib/auth";
 import { getOwnedContact, listOwnedLists } from "@/lib/contacts";
 import { updateContact, deleteContact } from "../actions";
@@ -35,10 +36,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
       />
 
       {contact.status === "active" || contact.status === "pending" ? (
-        <form action={deleteContact} className="mt-6">
-          <input type="hidden" name="id" value={contact.$id} />
-          <button className="rounded border px-4 py-2 text-sm">Delete contact</button>
-        </form>
+        <DeleteContactButton action={deleteContact} contactId={contact.$id} />
       ) : (
         <p className="mt-6 text-xs text-gray-500">
           This contact cannot be deleted. It stays on your account so we never email them again.
