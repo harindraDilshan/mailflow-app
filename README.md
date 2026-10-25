@@ -17,6 +17,15 @@ Open [http://localhost:3000](http://localhost:3000).
 - `npm run lint` – lint the project
 - `npm run generate-csv -- [count] [output.csv]` – create a sample contacts CSV for import (defaults to 1,000 rows in `contacts.csv`; maximum 5,000)
 
+## Developer API
+
+Mailflow includes an HTTP API and embeddable forms to collect subscribers with double opt-in:
+
+- **Documentation**: View the full interactive guide and reference at [/docs/api](http://localhost:3000/docs/api).
+- **Subscribe Endpoint**: `POST /api/v1/subscribe` (supports public keys for browser forms, and secret keys for backend servers).
+- **Lists Endpoint**: `GET /api/v1/lists` (requires a secret key).
+- **Embed Form**: Copy accessible HTML snippets directly from the Mailflow dashboard under **Lists → Collect subscribers**.
+
 ---
 
 # Email Marketing Platform: User Stories

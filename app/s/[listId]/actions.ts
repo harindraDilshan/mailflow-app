@@ -33,5 +33,6 @@ export async function hostedSubscribe(_: State, formData: FormData): Promise<Sta
       error: result.code === "invalid_email" ? "Enter a valid email address." : "Sign-ups are closed right now.",
     };
   }
-  return { message: result.status === "already_subscribed" ? "You are already subscribed." : PENDING };
+  // SPEC CHANGE: Always return PENDING so a visitor cannot find out who is already on a list.
+  return { message: PENDING };
 }

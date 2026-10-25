@@ -4,6 +4,18 @@ import { listOwnedLists } from "@/lib/contacts";
 import { listApiKeys } from "@/lib/api-keys";
 import { KeyForm } from "./key-form";
 import { createKey, revokeKey } from "./actions";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { BookOpen, Key } from "lucide-react";
 
 export default async function DevelopersPage() {
   const user = await requireUser();
@@ -11,50 +23,96 @@ export default async function DevelopersPage() {
   const listName = new Map(lists.map((l) => [l.$id, l.name]));
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Developers</h1>
-        <Link href="/developers/docs" className="text-sm underline">API docs</Link>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            API & Developers
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            Generate and manage API keys for website subscribe forms and server integrations
+          </p>
+        </div>
+        <Button variant="outline" size="sm" render={<Link href="/docs/api" />}>
+          <BookOpen className="size-3.5" />
+          <span>API Documentation</span>
+        </Button>
       </div>
 
-      <table className="w-full border text-left text-sm">
-        <thead>
-          <tr className="bg-gray-50">
-            <th className="p-2">Name</th><th className="p-2">Type</th><th className="p-2">Key</th>
-            <th className="p-2">List / websites</th><th className="p-2">Last used</th><th className="p-2">Status</th><th className="p-2" />
-          </tr>
-        </thead>
-        <tbody>
-          {keys.length === 0 && <tr><td colSpan={7} className="p-3 text-gray-500">No keys yet.</td></tr>}
-          {keys.map((k) => (
-            <tr key={k.$id} className="border-t align-top">
-              <td className="p-2">{k.name}</td>
-              <td className="p-2">{k.type}</td>
-              <td className="p-2"><code>{k.prefix}…</code></td>
-              <td className="p-2 text-xs">
-                {k.type === "public"
-                  ? <>{listName.get(k.listId ?? "") ?? "(deleted list)"}<br />{(k.allowedOrigins ?? []).join(", ")}</>
-                  : "All lists (server only)"}
-              </td>
-              <td className="p-2">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : "never"}</td>
-              <td className="p-2">{k.status}</td>
-              <td className="p-2">
-                {k.status === "active" && (
-                  <form action={revokeKey}>
-                    <input type="hidden" name="id" value={k.$id} />
-                    <button className="underline">Revoke</button>
-                  </form>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="rounded-xl border border-border bg-card shadow-xs">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Key Name</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Prefix</TableHead>
+              <TableHead>Scope / Allowed Websites</TableHead>
+              <TableHead>Last Used</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {keys.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
+                  No API keys created yet. Generate a key below to connect your frontend or backend.
+                </TableCell>
+              </TableRow>
+            )}
+            {keys.map((k) => (
+              <TableRow key={k.$id}>
+                <TableCell className="font-medium text-xs">{k.name}</TableCell>
+                <TableCell className="text-xs text-muted-foreground capitalize">{k.type}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  <code>{k.prefix}…</code>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {k.type === "public"
+                    ? `${listName.get(k.listId ?? "") ?? "Single list"} (${(k.allowedOrigins ?? []).join(", ") || "Any origin"})`
+                    : "All lists (Server-side)"}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={k.status === "active" ? "default" : "outline"} className="text-[10px]">
+                    {k.status}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {k.status === "active" && (
+                    <form action={revokeKey}>
+                      <input type="hidden" name="id" value={k.$id} />
+                      <Button type="submit" variant="ghost" size="xs" className="text-destructive">
+                        Revoke
+                      </Button>
+                    </form>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
-      <section>
-        <h2 className="mb-2 font-medium">Create a key</h2>
-        <KeyForm action={createKey} lists={lists.filter((l) => l.fromEmail).map((l) => ({ id: l.$id, name: l.name }))} />
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Key className="size-4" />
+            <span>Generate New API Key</span>
+          </CardTitle>
+          <CardDescription>
+            Public keys can only subscribe contacts to a designated list; Secret keys allow full administrative API access.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <KeyForm
+            action={createKey}
+            lists={lists.filter((l) => l.fromEmail).map((l) => ({ id: l.$id, name: l.name }))}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

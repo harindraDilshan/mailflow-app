@@ -1,27 +1,65 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/auth-form";
 import { getLoggedInUser } from "@/lib/auth";
 import { signIn } from "../actions";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
-export default async function LoginPage() {
-  if (await getLoggedInUser()) redirect("/dashboard");
+export default function LoginPage() {
   return (
-    <>
-      <h1 className="mb-6 text-2xl font-semibold">Log in</h1>
-      <AuthForm
-        action={signIn}
-        submitLabel="Log in"
-        fields={[
-          { name: "email", label: "Email", type: "email" },
-          { name: "password", label: "Password", type: "password" },
-        ]}
-      />
-      <p className="mt-4 text-sm">
-        <Link href="/forgot-password" className="underline">Forgot password?</Link>
-        {" · "}
-        <Link href="/signup" className="underline">Create account</Link>
-      </p>
-    </>
+    <Suspense
+      fallback={
+        <Card>
+          <CardHeader>
+            <CardTitle>Log in to Mailflow</CardTitle>
+            <CardDescription>Loading...</CardDescription>
+          </CardHeader>
+          <CardContent className="h-40 flex items-center justify-center text-xs text-muted-foreground">
+            Loading...
+          </CardContent>
+        </Card>
+      }
+    >
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+async function LoginContent() {
+  if (await getLoggedInUser()) redirect("/dashboard");
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Log in to Mailflow</CardTitle>
+        <CardDescription>Enter your credentials to access your email platform</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <AuthForm
+          action={signIn}
+          submitLabel="Log In"
+          fields={[
+            { name: "email", label: "Email Address", type: "email", placeholder: "you@example.com" },
+            { name: "password", label: "Password", type: "password" },
+          ]}
+        />
+      </CardContent>
+      <CardFooter className="flex justify-between text-xs text-muted-foreground">
+        <Link href="/forgot-password" className="hover:underline">
+          Forgot password?
+        </Link>
+        <Link href="/signup" className="hover:underline">
+          Create account
+        </Link>
+      </CardFooter>
+    </Card>
   );
 }

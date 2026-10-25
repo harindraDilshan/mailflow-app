@@ -63,7 +63,8 @@ console.log(`Worker running. Sending up to ${rate} emails/second, ${concurrency}
 
 async function shutdown() {
   console.log("Stopping... waiting for current jobs to finish.");
-  await Promise.all([prepareWorker.close(), emailWorker.close(), confirmWorker.close()]);
+  clearInterval(sweeper);
+  await Promise.all([prepareWorker.close(), emailWorker.close(), confirmWorker.close(), automationWorker.close()]);
   stopSesEvents();
   process.exit(0);
 }
