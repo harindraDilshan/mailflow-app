@@ -52,7 +52,7 @@ export function Sidebar({ collapsed = false, onToggleCollapse, className }: Side
       items: [
         { label: placeholders.nav.domains, href: "/domains", icon: Globe },
         { label: placeholders.nav.developers, href: "/developers", icon: Key },
-        { label: placeholders.nav.docs, href: "/developers/docs", icon: BookOpen },
+        { label: placeholders.nav.docs, href: "/docs/api", icon: BookOpen },
       ],
     },
   ];

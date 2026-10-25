@@ -105,7 +105,7 @@ async function CollectContent({ params }: { params: Promise<{ id: string }> }) {
         <pre className="overflow-x-auto rounded bg-muted/50 p-3 text-xs">{curl}</pre>
         <p className="mt-2 text-sm">
           List ID: <code>{list.$id}</code> <CopyButton text={list.$id} /> ·{" "}
-          <Link href="/developers/docs" className="underline">Read the docs</Link>
+          <Link href="/docs/api" className="underline">Read the docs</Link>
         </p>
       </section>
     </div>

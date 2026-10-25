@@ -140,6 +140,7 @@ const specs: Spec[] = [
     ],
     indexes: [
       { key: "uniq_hash", type: "unique", columns: ["keyHash"] },
+      { key: "idx_account", type: "key", columns: ["accountId"] },
       { key: "idx_account_list", type: "key", columns: ["accountId", "listId"] },
     ],
   },

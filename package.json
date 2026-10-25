@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:api": "tsx scripts/test-subscribe-api.ts",
     "db:setup": "tsx --env-file=.env scripts/setup-tables.ts",
     "db:reset": "tsx --env-file=.env scripts/setup-tables.ts --reset",
     "worker": "tsx --env-file=.env worker/index.ts",

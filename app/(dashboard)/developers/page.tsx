@@ -33,7 +33,7 @@ export default async function DevelopersPage() {
             Generate and manage API keys for website subscribe forms and server integrations
           </p>
         </div>
-        <Button variant="outline" size="sm" render={<Link href="/developers/docs" />}>
+        <Button variant="outline" size="sm" render={<Link href="/docs/api" />}>
           <BookOpen className="size-3.5" />
           <span>API Documentation</span>
         </Button>

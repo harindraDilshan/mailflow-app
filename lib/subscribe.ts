@@ -66,7 +66,14 @@ export async function subscribeEmail(input: {
     | undefined;
 
   if (existing) {
-    if (existing.status === "active") return { ok: true, status: "already_subscribed" };
+    if (existing.status === "active") {
+      // SPEC CHANGE (security): For public keys and hosted page, answer pending_confirmation
+      // so a visitor cannot find out who is on a list. For secret keys, answer already_subscribed.
+      return {
+        ok: true,
+        status: input.source === "api" ? "already_subscribed" : "pending_confirmation",
+      };
+    }
     if (existing.status !== "pending") return { ok: true, status: "pending_confirmation" }; // blocked: do not reveal
 
     const last = existing.confirmSentAt ? Date.parse(existing.confirmSentAt) : 0;
