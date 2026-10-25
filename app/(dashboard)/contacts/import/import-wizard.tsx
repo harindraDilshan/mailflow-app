@@ -4,6 +4,17 @@ import { useMemo, useState } from "react";
 import Papa from "papaparse";
 import { isValidEmail, normalizeEmail, MAX_IMPORT_ROWS, MAX_CHUNK } from "@/lib/contact-rules";
 import { importChunk } from "../actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 type Row = Record<string, string>;
 type Result = { added: number; skipped: number; invalid: number; duplicatesInFile: number };
@@ -50,8 +61,14 @@ export function ImportWizard({ lists }: { lists: { id: string; name: string }[] 
 
     for (const r of rows) {
       const email = normalizeEmail(r[map.email] ?? "");
-      if (!isValidEmail(email)) { invalid++; continue; }
-      if (seen.has(email)) { duplicates++; continue; }
+      if (!isValidEmail(email)) {
+        invalid++;
+        continue;
+      }
+      if (seen.has(email)) {
+        duplicates++;
+        continue;
+      }
       seen.add(email);
       valid.push({
         email,
@@ -75,124 +92,197 @@ export function ImportWizard({ lists }: { lists: { id: string; name: string }[] 
         tags,
         consent,
       });
-      if (res.error) { setError(res.error); break; }
+      if (res.error) {
+        setError(res.error);
+        break;
+      }
       total.added += res.added;
       total.skipped += res.skipped;
       total.invalid += res.invalid;
       setProgress(Math.min(i + MAX_CHUNK, analysis.valid.length));
     }
 
-    setResult({ ...total, invalid: total.invalid + analysis.invalid, duplicatesInFile: analysis.duplicates });
+    setResult({
+      ...total,
+      invalid: total.invalid + analysis.invalid,
+      duplicatesInFile: analysis.duplicates,
+    });
     setBusy(false);
   }
 
-  const Select = ({ label, field, optional }: { label: string; field: "email" | "name" | "tags"; optional?: boolean }) => (
-    <label className="block text-sm">
-      {label}
+  const Select = ({
+    label,
+    field,
+    optional,
+  }: {
+    label: string;
+    field: "email" | "name" | "tags";
+    optional?: boolean;
+  }) => (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-foreground">{label}</label>
       <select
         value={map[field]}
         onChange={(e) => setMap({ ...map, [field]: e.target.value })}
-        className="mt-1 w-full rounded border px-3 py-2"
+        className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
       >
         <option value="">{optional ? "(none)" : "Choose a column"}</option>
-        {headers.map((h) => <option key={h} value={h}>{h}</option>)}
+        {headers.map((h) => (
+          <option key={h} value={h}>
+            {h}
+          </option>
+        ))}
       </select>
-    </label>
+    </div>
   );
 
   return (
-    <div className="space-y-6">
-      <div>
-        <input
-          type="file" accept=".csv,text/csv"
+    <div className="space-y-5 text-xs">
+      <div className="space-y-1.5">
+        <Input
+          type="file"
+          accept=".csv,text/csv"
           onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+          className="h-9 cursor-pointer file:cursor-pointer"
         />
-        <p className="mt-1 text-xs text-gray-500">
-          CSV with a header row. Up to {MAX_IMPORT_ROWS} rows. Email is required, name and tags are optional.
+        <p className="text-[11px] text-muted-foreground">
+          Upload a CSV with a header row. Up to {MAX_IMPORT_ROWS} contacts per upload.
         </p>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="rounded-md border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive">
+          {error}
+        </p>
+      )}
 
       {rows.length > 0 && (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Select label="Email column" field="email" />
+            <Select label="Email column (Required)" field="email" />
             <Select label="Name column" field="name" optional />
             <Select label="Tags column" field="tags" optional />
           </div>
 
-          <div className="rounded border p-3 text-sm">
-            <p>Rows in file: <b>{rows.length}</b></p>
-            <p>Ready to import: <b>{analysis.valid.length}</b></p>
-            <p>Invalid emails: <b>{analysis.invalid}</b></p>
-            <p>Repeated in the file: <b>{analysis.duplicates}</b></p>
-            <p className="mt-1 text-xs text-gray-500">
-              People who are already in your contacts are skipped when you import.
-            </p>
+          <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-1">
+            <p className="font-medium text-foreground">File Summary:</p>
+            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+              <div>
+                Total rows: <span className="font-mono font-semibold">{rows.length}</span>
+              </div>
+              <div>
+                Valid contacts: <span className="font-mono font-semibold">{analysis.valid.length}</span>
+              </div>
+              <div>
+                Invalid emails: <span className="font-mono font-semibold">{analysis.invalid}</span>
+              </div>
+              <div>
+                Duplicates: <span className="font-mono font-semibold">{analysis.duplicates}</span>
+              </div>
+            </div>
           </div>
 
-          <table className="w-full border text-left text-sm">
-            <thead>
-              <tr className="bg-gray-50"><th className="p-2">Email</th><th className="p-2">Name</th><th className="p-2">Tags</th></tr>
-            </thead>
-            <tbody>
-              {analysis.valid.slice(0, 5).map((r) => (
-                <tr key={r.email} className="border-t">
-                  <td className="p-2">{r.email}</td><td className="p-2">{r.name}</td><td className="p-2">{r.tags}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="rounded-xl border border-border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Tags</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {analysis.valid.slice(0, 5).map((r) => (
+                  <TableRow key={r.email}>
+                    <TableCell className="font-medium text-xs">{r.email}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.name || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.tags || "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
           {lists.length > 0 && (
-            <fieldset>
-              <legend className="mb-1 text-sm">Add everyone to these lists (optional)</legend>
-              {lists.map((l) => (
-                <label key={l.id} className="mr-4 inline-flex items-center gap-1 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={listIds.includes(l.id)}
-                    onChange={(e) =>
-                      setListIds(e.target.checked ? [...listIds, l.id] : listIds.filter((x) => x !== l.id))
-                    }
-                  />
-                  {l.name}
-                </label>
-              ))}
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-medium text-foreground">
+                Add contacts to these lists:
+              </legend>
+              <div className="flex flex-wrap gap-4">
+                {lists.map((l) => (
+                  <label key={l.id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={listIds.includes(l.id)}
+                      onChange={(e) =>
+                        setListIds(
+                          e.target.checked
+                            ? [...listIds, l.id]
+                            : listIds.filter((x) => x !== l.id)
+                        )
+                      }
+                      className="rounded border-input text-primary focus:ring-ring"
+                    />
+                    <span>{l.name}</span>
+                  </label>
+                ))}
+              </div>
             </fieldset>
           )}
 
-          <label className="block text-sm">
-            Add these tags to everyone (optional)
-            <input
-              value={tags} onChange={(e) => setTags(e.target.value)} placeholder="imported, october"
-              className="mt-1 w-full rounded border px-3 py-2"
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">
+              Add tags to everyone (comma separated):
+            </label>
+            <Input
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="e.g. newsletter, imported-2026"
             />
+          </div>
+
+          <label className="flex items-start gap-2 cursor-pointer rounded-md border border-border bg-muted/30 p-2.5">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5 rounded border-input text-primary focus:ring-ring"
+            />
+            <span className="text-xs text-foreground">
+              I confirm that all contacts explicitly consented to receive emails from this organization. I did not purchase or scrape these email addresses.
+            </span>
           </label>
 
-          <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1" />
-            I confirm that I have permission to email these people. I did not buy or scrape this list.
-          </label>
-
-          <button
+          <Button
             onClick={run}
             disabled={!consent || analysis.valid.length === 0 || busy}
-            className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
+            className="w-full"
           >
-            {busy ? `Importing ${progress} of ${analysis.valid.length}...` : `Import ${analysis.valid.length} contacts`}
-          </button>
+            {busy
+              ? `Importing ${progress} of ${analysis.valid.length}...`
+              : `Import ${analysis.valid.length} Contacts`}
+          </Button>
         </>
       )}
 
       {result && (
-        <div className="rounded border bg-green-50 p-4 text-sm">
-          <p className="mb-1 font-medium">Import finished</p>
-          <p>Added: <b>{result.added}</b></p>
-          <p>Skipped (already in your contacts, or over your limit): <b>{result.skipped}</b></p>
-          <p>Invalid: <b>{result.invalid}</b></p>
-          <p>Repeated in the file: <b>{result.duplicatesInFile}</b></p>
+        <div className="rounded-lg border border-border bg-muted/60 p-4 space-y-1">
+          <p className="font-semibold text-foreground">Import Finished</p>
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 pt-1">
+            <div>
+              Added: <span className="font-mono font-semibold">{result.added}</span>
+            </div>
+            <div>
+              Skipped: <span className="font-mono font-semibold">{result.skipped}</span>
+            </div>
+            <div>
+              Invalid: <span className="font-mono font-semibold">{result.invalid}</span>
+            </div>
+            <div>
+              Duplicates:{" "}
+              <span className="font-mono font-semibold">{result.duplicatesInFile}</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

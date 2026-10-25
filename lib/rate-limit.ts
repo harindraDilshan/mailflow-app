@@ -5,7 +5,11 @@ const g = globalThis as unknown as { __rl?: IORedis };
 
 function redis() {
   if (!g.__rl) {
-    g.__rl = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+    const url = (process.env.REDIS_URL ?? "redis://127.0.0.1:6379").replace(
+      "redis://localhost",
+      "redis://127.0.0.1"
+    );
+    g.__rl = new IORedis(url, {
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
     });

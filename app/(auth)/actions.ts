@@ -54,11 +54,16 @@ export async function signIn(_: State, formData: FormData): Promise<State> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
+  if (!email || !password) {
+    return { error: "Please enter your email and password." };
+  }
+
   try {
     const { account } = createAdminClient();
     const session = await account.createEmailPasswordSession({ email, password });
     await setSessionCookie(session.secret);
-  } catch {
+  } catch (e) {
+    console.error("signIn error:", e);
     return { error: "Wrong email or password." };
   }
 
@@ -86,10 +91,15 @@ export async function resendVerification(): Promise<State> {
 
 export async function forgotPassword(_: State, formData: FormData): Promise<State> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email) {
+    return { error: "Please enter your email address." };
+  }
   try {
     const { account } = createAdminClient();
     await account.createRecovery({ email, url: `${APP_URL}/reset-password` });
-  } catch {}
+  } catch (e) {
+    console.error("forgotPassword error:", e);
+  }
   // Same message always, so nobody can find out which emails exist.
   return { message: "If this email has an account, we sent a reset link." };
 }
@@ -104,7 +114,8 @@ export async function resetPassword(_: State, formData: FormData): Promise<State
   try {
     const { account } = createAdminClient();
     await account.updateRecovery({ userId, secret, password });
-  } catch {
+  } catch (e) {
+    console.error("resetPassword error:", e);
     return { error: "This reset link is wrong or expired. Ask for a new one." };
   }
 

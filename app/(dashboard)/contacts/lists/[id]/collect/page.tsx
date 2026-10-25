@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CopyButton } from "@/components/copy-button";
@@ -8,7 +9,21 @@ import { buildEmbedSnippet } from "@/lib/embed";
 import { CollectSettingsForm } from "./settings-form";
 import { saveSubscribeSettings } from "./actions";
 
-export default async function CollectPage({ params }: { params: Promise<{ id: string }> }) {
+export default function CollectPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-64 items-center justify-center text-xs text-muted-foreground">
+          Loading subscribe collection settings...
+        </div>
+      }
+    >
+      <CollectContent params={params} />
+    </Suspense>
+  );
+}
+
+async function CollectContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireUser();
   const list = await getOwnedList(user.$id, id);
@@ -30,7 +45,7 @@ export default async function CollectPage({ params }: { params: Promise<{ id: st
       <div>
         <Link href="/contacts/lists" className="text-sm underline">← Lists</Link>
         <h1 className="mt-2 text-2xl font-semibold">Collect subscribers: {list.name}</h1>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           Everyone who signs up gets a confirmation email first. Only confirmed people receive campaigns.
         </p>
       </div>
@@ -59,7 +74,7 @@ export default async function CollectPage({ params }: { params: Promise<{ id: st
             <Link href={hostedUrl} target="_blank" className="underline">Open the page</Link>
           </p>
         ) : (
-          <p className="text-sm text-gray-500">Turn on the page and set a sender above to get your link.</p>
+          <p className="text-sm text-muted-foreground">Turn on the page and set a sender above to get your link.</p>
         )}
       </section>
 
@@ -69,13 +84,13 @@ export default async function CollectPage({ params }: { params: Promise<{ id: st
           <>
             <textarea readOnly rows={14} value={snippet} className="w-full rounded border p-2 font-mono text-xs" />
             <CopyButton text={snippet} />
-            <p className="mt-2 text-xs text-gray-600">
+            <p className="mt-2 text-xs text-muted-foreground">
               Allowed websites for this key: {(pk?.allowedOrigins ?? []).join(", ") || "none"}.{" "}
               <Link href="/developers" className="underline">Manage keys</Link>
             </p>
           </>
         ) : (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             {configured ? (
               <>Create a <b>public key</b> for this list in <Link href="/developers" className="underline">Developers</Link>, then the snippet appears here.</>
             ) : (
@@ -87,7 +102,7 @@ export default async function CollectPage({ params }: { params: Promise<{ id: st
 
       <section>
         <h2 className="mb-2 font-medium">4. API (for developers)</h2>
-        <pre className="overflow-x-auto rounded bg-gray-50 p-3 text-xs">{curl}</pre>
+        <pre className="overflow-x-auto rounded bg-muted/50 p-3 text-xs">{curl}</pre>
         <p className="mt-2 text-sm">
           List ID: <code>{list.$id}</code> <CopyButton text={list.$id} /> ·{" "}
           <Link href="/developers/docs" className="underline">Read the docs</Link>

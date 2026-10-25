@@ -3,34 +3,91 @@ import { AuthForm } from "@/components/auth-form";
 import { requireUser } from "@/lib/auth";
 import { listOwnedDomains } from "@/lib/domains";
 import { addDomain } from "./actions";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Globe, ShieldCheck } from "lucide-react";
 
 export default async function DomainsPage() {
   const user = await requireUser();
   const domains = await listOwnedDomains(user.$id);
 
   return (
-    <div className="max-w-xl">
-      <h1 className="mb-4 text-2xl font-semibold">Sending domains</h1>
+    <div className="max-w-3xl space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          Sending Domains
+        </h1>
+        <p className="text-xs text-muted-foreground">
+          Authenticate your sender addresses with SPF, DKIM, and DMARC to guarantee inbox delivery
+        </p>
+      </div>
 
-      <ul className="mb-8 space-y-2">
-        {domains.length === 0 && <li className="text-sm text-gray-500">No domains yet.</li>}
-        {domains.map((d) => (
-          <li key={d.$id} className="flex items-center justify-between rounded border p-3">
-            <Link href={`/domains/${d.$id}`} className="underline">{d.domain}</Link>
-            <span className="text-sm">{d.status}</span>
-          </li>
-        ))}
-      </ul>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="size-4" />
+            <span>Configured Domains</span>
+          </CardTitle>
+          <CardDescription>
+            Domains registered for outgoing email delivery
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="divide-y divide-border">
+            {domains.length === 0 && (
+              <p className="py-6 text-center text-xs text-muted-foreground">
+                No sending domains added yet. Add your domain below to configure DNS verification.
+              </p>
+            )}
+            {domains.map((d) => (
+              <div key={d.$id} className="flex items-center justify-between py-3 text-xs">
+                <div>
+                  <Link
+                    href={`/domains/${d.$id}`}
+                    className="font-medium text-foreground hover:underline"
+                  >
+                    {d.domain}
+                  </Link>
+                  <p className="text-[11px] text-muted-foreground">
+                    Click to view required DNS records and verification status
+                  </p>
+                </div>
+                <Badge
+                  variant={d.status === "verified" ? "default" : "outline"}
+                  className="text-[10px]"
+                >
+                  {d.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
-      <h2 className="mb-2 font-medium">Add a domain</h2>
-      <p className="mb-3 text-sm text-gray-600">
-        Tip: use a subdomain like mail.yourshop.com. It protects your main email reputation.
-      </p>
-      <AuthForm
-        action={addDomain}
-        submitLabel="Add domain"
-        fields={[{ name: "domain", label: "Domain" }]}
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="size-4" />
+            <span>Add a Sending Domain</span>
+          </CardTitle>
+          <CardDescription>
+            We recommend using a dedicated subdomain such as <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">mail.yourdomain.com</code> to protect your main email reputation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AuthForm
+            action={addDomain}
+            submitLabel="Add Domain"
+            fields={[
+              {
+                name: "domain",
+                label: "Domain name",
+                placeholder: "mail.example.com",
+              },
+            ]}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

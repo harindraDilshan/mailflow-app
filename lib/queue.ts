@@ -7,7 +7,11 @@ export const CONFIRM_QUEUE = "confirm-email";
 export const AUTOMATION_QUEUE = "automation";
 
 export function createConnection() {
-  return new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+  const url = (process.env.REDIS_URL ?? "redis://127.0.0.1:6379").replace(
+    "redis://localhost",
+    "redis://127.0.0.1"
+  );
+  return new IORedis(url, {
     maxRetriesPerRequest: null, // required by BullMQ workers
   });
 }

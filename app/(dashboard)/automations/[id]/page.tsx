@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
@@ -7,7 +8,21 @@ import { reviewAutomation } from "@/lib/automation-review";
 import { AutomationForm } from "../automation-form";
 import { saveAutomation, setAutomationStatus } from "../actions";
 
-export default async function AutomationPage({ params }: { params: Promise<{ id: string }> }) {
+export default function AutomationPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-64 items-center justify-center text-xs text-muted-foreground">
+          Loading automation details...
+        </div>
+      }
+    >
+      <AutomationContent params={params} />
+    </Suspense>
+  );
+}
+
+async function AutomationContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireUser();
   const a = await getOwnedAutomation(user.$id, id);
@@ -23,7 +38,7 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
       <div>
         <Link href="/automations" className="text-sm underline">← Automations</Link>
         <h1 className="mt-2 text-2xl font-semibold">{a.name}</h1>
-        <p className="text-sm text-gray-600">Status: <b>{a.status}</b></p>
+        <p className="text-sm text-muted-foreground">Status: <b>{a.status}</b></p>
       </div>
 
       <section className="rounded border p-4">
@@ -42,7 +57,7 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
             ) : (
               <p className="mb-3 text-sm text-green-700">Ready to turn on.</p>
             )}
-            <p className="mb-3 text-xs text-gray-600">
+            <p className="mb-3 text-xs text-muted-foreground">
               Only people who join <b>after</b> you turn it on will enter. People already on the list will not get these emails.
             </p>
             <form action={setAutomationStatus}>
@@ -79,7 +94,7 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
             </tr>
           </thead>
           <tbody>
-            {stats.perStep.length === 0 && <tr><td colSpan={4} className="p-3 text-gray-500">No email steps.</td></tr>}
+            {stats.perStep.length === 0 && <tr><td colSpan={4} className="p-3 text-muted-foreground">No email steps.</td></tr>}
             {stats.perStep.map((s) => (
               <tr key={s.index} className="border-t">
                 <td className="p-2">Step {s.index + 1}: {s.subject || "(no subject)"}</td>
@@ -100,7 +115,7 @@ export default async function AutomationPage({ params }: { params: Promise<{ id:
             </tr>
           </thead>
           <tbody>
-            {runs.length === 0 && <tr><td colSpan={5} className="p-3 text-gray-500">Nobody has entered yet.</td></tr>}
+            {runs.length === 0 && <tr><td colSpan={5} className="p-3 text-muted-foreground">Nobody has entered yet.</td></tr>}
             {runs.map((r) => (
               <tr key={r.$id} className="border-t">
                 <td className="p-2">{r.email}</td>

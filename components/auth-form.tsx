@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type State = { error?: string; message?: string } | undefined;
-type Field = { name: string; label: string; type?: string };
+type Field = { name: string; label: string; type?: string; placeholder?: string };
 
 export function AuthForm({
   action,
@@ -25,27 +27,32 @@ export function AuthForm({
           <input key={k} type="hidden" name={k} value={v} />
         ))}
       {fields.map((f) => (
-        <div key={f.name}>
-          <label htmlFor={f.name} className="mb-1 block text-sm">
+        <div key={f.name} className="space-y-1.5">
+          <label htmlFor={f.name} className="text-xs font-medium text-foreground">
             {f.label}
           </label>
-          <input
+          <Input
             id={f.name}
             name={f.name}
             type={f.type ?? "text"}
+            placeholder={f.placeholder}
             required
-            className="w-full rounded border px-3 py-2"
           />
         </div>
       ))}
-      {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
-      {state?.message && <p className="text-sm text-green-700">{state.message}</p>}
-      <button
-        disabled={pending}
-        className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
-      >
-        {pending ? "Please wait..." : submitLabel}
-      </button>
+      {state?.error && (
+        <p className="rounded-md border border-destructive/20 bg-destructive/10 p-2 text-xs text-destructive">
+          {state.error}
+        </p>
+      )}
+      {state?.message && (
+        <p className="rounded-md border border-border bg-muted p-2 text-xs text-muted-foreground">
+          {state.message}
+        </p>
+      )}
+      <Button type="submit" disabled={pending} className="w-full">
+        {pending ? "..." : submitLabel}
+      </Button>
     </form>
   );
 }

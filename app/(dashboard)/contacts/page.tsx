@@ -1,23 +1,45 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { listOwnedLists, searchContacts } from "@/lib/contacts";
 import { PAGE_SIZE, STATUSES } from "@/lib/contact-rules";
 import { ContactsTable } from "./contacts-table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   bulkDeleteContacts,
   deleteAllMatchingContacts,
   bulkArchiveContacts,
   bulkUnarchiveContacts,
 } from "./actions";
+import { Plus, Upload, ListFilter } from "lucide-react";
 
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
-export default async function ContactsPage({ searchParams }: { searchParams: Promise<SP> }) {
+export default function ContactsPage({ searchParams }: { searchParams: Promise<SP> }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-64 items-center justify-center text-xs text-muted-foreground">
+          Loading contacts...
+        </div>
+      }
+    >
+      <ContactsContent searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function ContactsContent({ searchParams }: { searchParams: Promise<SP> }) {
   const raw = await searchParams;
   const sp = {
-    q: one(raw.q), status: one(raw.status), list: one(raw.list),
-    tag: one(raw.tag), from: one(raw.from), to: one(raw.to),
+    q: one(raw.q),
+    status: one(raw.status),
+    list: one(raw.list),
+    tag: one(raw.tag),
+    from: one(raw.from),
+    to: one(raw.to),
   };
   const page = Math.max(1, parseInt(one(raw.page) ?? "1", 10) || 1);
 
@@ -25,7 +47,13 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
   const lists = await listOwnedLists(user.$id);
 
   const { rows, total } = await searchContacts(user.$id, {
-    q: sp.q, status: sp.status, listId: sp.list, tag: sp.tag, from: sp.from, to: sp.to, page,
+    q: sp.q,
+    status: sp.status,
+    listId: sp.list,
+    tag: sp.tag,
+    from: sp.from,
+    to: sp.to,
+    page,
   });
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -38,8 +66,6 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
 
   const listsForTable = lists.map((l) => ({ id: l.$id, name: l.name }));
 
-  // Appwrite rows are class instances. Serialize to plain objects before
-  // passing to the Client Component (Next.js only accepts plain objects).
   const plainRows = rows.map((c) => ({
     $id: c.$id,
     $createdAt: c.$createdAt,
@@ -57,33 +83,110 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
   }));
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Contacts ({total})</h1>
-        <div className="flex gap-3 text-sm">
-          <Link href="/contacts/new" className="underline">Add contact</Link>
-          <Link href="/contacts/import" className="underline">Import CSV</Link>
-          <Link href="/contacts/lists" className="underline">Lists</Link>
+    <div className="space-y-6">
+      {/* Page Title & Actions */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            Contacts ({total})
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            Manage your audience, subscriber consent, and segmentation
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" render={<Link href="/contacts/lists" />}>
+            <ListFilter className="size-3.5" />
+            <span>Lists</span>
+          </Button>
+          <Button variant="outline" size="sm" render={<Link href="/contacts/import" />}>
+            <Upload className="size-3.5" />
+            <span>Import CSV</span>
+          </Button>
+          <Button size="sm" render={<Link href="/contacts/new" />}>
+            <Plus className="size-3.5" />
+            <span>Add Contact</span>
+          </Button>
         </div>
       </div>
 
-      <form className="mb-4 flex flex-wrap items-end gap-3 text-sm">
-        <input name="q" defaultValue={sp.q} placeholder="Search email or name" className="rounded border px-3 py-2" />
-        <select name="status" defaultValue={sp.status ?? ""} className="rounded border px-3 py-2">
-          <option value="">Any status</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select name="list" defaultValue={sp.list ?? ""} className="rounded border px-3 py-2">
-          <option value="">Any list</option>
-          {lists.map((l) => <option key={l.$id} value={l.$id}>{l.name}</option>)}
-        </select>
-        <input name="tag" defaultValue={sp.tag} placeholder="Tag" className="rounded border px-3 py-2" />
-        <label>From <input name="from" type="date" defaultValue={sp.from} className="rounded border px-2 py-2" /></label>
-        <label>To <input name="to" type="date" defaultValue={sp.to} className="rounded border px-2 py-2" /></label>
-        <button className="rounded bg-black px-4 py-2 text-white">Filter</button>
-        <Link href="/contacts" className="underline">Clear</Link>
-      </form>
+      {/* Filter Form */}
+      <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+        <form className="flex flex-wrap items-end gap-2.5 text-xs">
+          <div className="w-full sm:w-48">
+            <Input
+              name="q"
+              defaultValue={sp.q}
+              placeholder="Search email or name..."
+              className="h-8 text-xs"
+            />
+          </div>
+          <div className="w-full sm:w-36">
+            <select
+              name="status"
+              defaultValue={sp.status ?? ""}
+              aria-label="Filter by status"
+              className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            >
+              <option value="">Any status</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="w-full sm:w-36">
+            <select
+              name="list"
+              defaultValue={sp.list ?? ""}
+              aria-label="Filter by list"
+              className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            >
+              <option value="">Any list</option>
+              {lists.map((l) => (
+                <option key={l.$id} value={l.$id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="w-full sm:w-28">
+            <Input
+              name="tag"
+              defaultValue={sp.tag}
+              placeholder="Tag..."
+              className="h-8 text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <Input
+              name="from"
+              type="date"
+              defaultValue={sp.from}
+              aria-label="Date from"
+              className="h-8 w-32 text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <Input
+              name="to"
+              type="date"
+              defaultValue={sp.to}
+              aria-label="Date to"
+              className="h-8 w-32 text-xs"
+            />
+          </div>
+          <Button size="sm" type="submit">
+            Filter
+          </Button>
+          <Button variant="ghost" size="sm" render={<Link href="/contacts" />}>
+            Clear
+          </Button>
+        </form>
+      </div>
 
+      {/* Contacts Table Component */}
       <ContactsTable
         rows={plainRows}
         lists={listsForTable}
@@ -95,10 +198,23 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
         bulkUnarchiveAction={bulkUnarchiveContacts}
       />
 
-      <div className="mt-4 flex items-center gap-4 text-sm">
-        {page > 1 && <Link href={href(page - 1)} className="underline">← Previous</Link>}
-        <span>Page {page} of {pages}</span>
-        {page < pages && <Link href={href(page + 1)} className="underline">Next →</Link>}
+      {/* Pagination */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          Page {page} of {pages}
+        </span>
+        <div className="flex items-center gap-2">
+          {page > 1 && (
+            <Button variant="outline" size="xs" render={<Link href={href(page - 1)} />}>
+              ← Previous
+            </Button>
+          )}
+          {page < pages && (
+            <Button variant="outline" size="xs" render={<Link href={href(page + 1)} />}>
+              Next →
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
