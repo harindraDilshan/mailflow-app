@@ -18,6 +18,7 @@ export type ApiKeyRow = {
   lastUsedAt: string | null;
 };
 
+// Server (secret) keys. Website form keys are one per list, so the number of lists limits them.
 export const MAX_KEYS = 10;
 
 export const hashKey = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -27,15 +28,8 @@ function generateKey(type: "public" | "secret") {
   return { key, hash: hashKey(key), prefix: key.slice(0, 14) };
 }
 
-// "https://www.Exlorian.com/page" -> "https://www.exlorian.com"
-export function normalizeOrigin(input: string): string | null {
-  try {
-    const u = new URL(input.trim());
-    return u.protocol === "http:" || u.protocol === "https:" ? u.origin.toLowerCase() : null;
-  } catch {
-    return null;
-  }
-}
+// Kept here for older imports. The rule lives in lib/forms.ts, which the browser can use too.
+export { normalizeOrigin } from "@/lib/forms";
 
 export async function createApiKey(
   accountId: string,
@@ -72,14 +66,32 @@ export async function listApiKeys(accountId: string) {
   return res.rows as unknown as ApiKeyRow[];
 }
 
-export async function countActiveKeys(accountId: string) {
+export async function countActiveKeys(accountId: string, type?: "public" | "secret") {
   const { tablesDB } = createAdminClient();
   const res = await tablesDB.listRows({
     databaseId: DB_ID,
     tableId: API_KEYS_TABLE,
-    queries: [Query.equal("accountId", accountId), Query.equal("status", "active"), Query.limit(1)],
+    queries: [
+      Query.equal("accountId", accountId),
+      Query.equal("status", "active"),
+      ...(type ? [Query.equal("type", type)] : []),
+      Query.limit(1),
+    ],
   });
   return res.total;
+}
+
+// The websites that may use a form key. Returns false if the key is not this account's.
+export async function updateKeyOrigins(accountId: string, id: string, origins: string[]) {
+  const { tablesDB } = createAdminClient();
+  try {
+    const row = (await tablesDB.getRow({ databaseId: DB_ID, tableId: API_KEYS_TABLE, rowId: id })) as unknown as ApiKeyRow;
+    if (row.accountId !== accountId || row.type !== "public" || row.status !== "active") return false;
+    await tablesDB.updateRow({ databaseId: DB_ID, tableId: API_KEYS_TABLE, rowId: id, data: { allowedOrigins: origins } });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function revokeApiKey(accountId: string, id: string) {

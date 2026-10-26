@@ -99,7 +99,7 @@ export function ListsTable({ lists }: { lists: ListSummary[] }) {
                       </DropdownMenuItem>
                       <DropdownMenuItem render={<Link href={`/contacts/lists/${l.id}/collect`} />}>
                         <Globe />
-                        Collect subscribers
+                        Sign-up form
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => {

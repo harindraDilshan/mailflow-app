@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Settings,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ export function Sidebar({ collapsed = false, onToggleCollapse, className }: Side
         { label: placeholders.nav.contacts, href: "/contacts", icon: Users },
         { label: placeholders.nav.lists, href: "/contacts/lists", icon: ListFilter },
         { label: placeholders.nav.importCsv, href: "/contacts/import", icon: Upload },
+        { label: placeholders.nav.forms, href: "/contacts/forms", icon: ClipboardList },
       ],
     },
     {
