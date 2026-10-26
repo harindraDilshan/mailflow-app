@@ -24,7 +24,7 @@ import {
 import { formatNumber, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { cancelSchedule, deleteCampaign, duplicateCampaign } from "./actions";
-import { runAction } from "./run-action";
+import { runAction } from "@/components/run-action";
 
 export type CampaignsListView = { q?: string; tab?: string; page: number };
 
