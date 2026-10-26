@@ -35,10 +35,22 @@ async function createMessages(rows: Record<string, unknown>[]) {
   }
 }
 
-export async function prepareCampaign(job: Job<{ campaignId: string }>) {
+export async function prepareCampaign(job: Job<{ campaignId: string; scheduledAt?: string }>) {
   const { tablesDB } = createAdminClient();
   const campaign = await getCampaignById(job.data.campaignId);
-  if (!campaign || campaign.status !== "queued") return;
+  if (!campaign) return;
+
+  // A scheduled campaign: its time has come. A job of a cancelled or changed schedule does nothing.
+  if (campaign.status === "scheduled") {
+    const same = job.data.scheduledAt && Date.parse(job.data.scheduledAt) === Date.parse(campaign.scheduledAt ?? "");
+    if (!same) return;
+    await tablesDB.updateRow({
+      databaseId: DB_ID, tableId: CAMPAIGNS_TABLE, rowId: campaign.$id,
+      data: { status: "queued", startedAt: new Date().toISOString() },
+    });
+    campaign.status = "queued";
+  }
+  if (campaign.status !== "queued") return;
 
   const { email: emailQueue } = getQueues();
   let cursor: string | undefined;
@@ -167,13 +179,16 @@ export async function sendEmail(job: Job<{ messageId: string; campaignId: string
         pixelUrl: `${base}/t/o/${signOpen(messageId)}`,
       };
 
-  const html = renderEmail(campaign.html, { name: msg.name, email: msg.email }, pageUrl, tracking);
+  const html = renderEmail(campaign.html, { name: msg.name, email: msg.email }, pageUrl, tracking, {
+    previewText: campaign.previewText,
+  });
   const fromName = cleanHeader(campaign.fromName ?? "");
 
   const res = await getProvider().send({
     to: msg.email,
     from: fromName ? `${fromName} <${campaign.fromEmail}>` : campaign.fromEmail,
     subject: cleanHeader(campaign.subject),
+    replyTo: campaign.replyTo ? cleanHeader(campaign.replyTo) : undefined,
     html,
     text: htmlToText(html),
     headers: {

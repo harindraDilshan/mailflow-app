@@ -24,6 +24,7 @@ export class SesProvider implements EmailProvider {
         subject: msg.subject,
         html: msg.html,
         text: msg.text,
+        replyTo: msg.replyTo,
         headers: msg.headers,
         ses: {
           ...(process.env.SES_CONFIGURATION_SET

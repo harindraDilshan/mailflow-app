@@ -63,17 +63,21 @@ const specs: Spec[] = [
       { key: "accountId", type: "varchar", size: 36, required: true },
       { key: "name", type: "varchar", size: 150, required: true },
       { key: "subject", type: "varchar", size: 200, required: true },
+      { key: "previewText", type: "varchar", size: 200 },
       { key: "fromName", type: "varchar", size: 100 },
       { key: "fromEmail", type: "varchar", size: 254, required: true },
+      { key: "replyTo", type: "varchar", size: 254 },
       { key: "html", type: "text", required: true },
       { key: "listIds", type: "varchar", size: 36, array: true },
       { key: "status", type: "varchar", size: 20, default: "draft" },
+      { key: "scheduledAt", type: "datetime" },
       { key: "startedAt", type: "datetime" },
       { key: "finishedAt", type: "datetime" },
     ],
     indexes: [
       { key: "idx_account", type: "key", columns: ["accountId"] },
       { key: "idx_status", type: "key", columns: ["status"] },
+      { key: "idx_account_status", type: "key", columns: ["accountId", "status"] }, // campaigns screen tabs
     ],
   },
   {
