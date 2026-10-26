@@ -10,6 +10,7 @@ const db = new TablesDB(client);
 type Col =
   | { key: string; type: "varchar"; size: number; required?: boolean; default?: string; array?: boolean }
   | { key: string; type: "text"; required?: boolean }
+  | { key: string; type: "mediumtext"; required?: boolean } // up to 16 MB
   | { key: string; type: "int"; required?: boolean; default?: number }
   | { key: string; type: "bool"; required?: boolean; default?: boolean }
   | { key: string; type: "datetime"; required?: boolean };
@@ -180,7 +181,8 @@ const specs: Spec[] = [
       { key: "triggerValue", type: "varchar", size: 100, required: true }, // list ID or tag
       { key: "fromName", type: "varchar", size: 100 },
       { key: "fromEmail", type: "varchar", size: 254, required: true },
-      { key: "steps", type: "text", required: true }, // JSON list of steps
+      { key: "steps", type: "text", required: true }, // JSON list of steps (old automations)
+      { key: "flow", type: "mediumtext" }, // JSON workflow graph (lib/automation-flow.ts)
     ],
     indexes: [
       { key: "idx_account", type: "key", columns: ["accountId"] },
@@ -219,6 +221,8 @@ async function addColumn(tableId: string, c: Col) {
       return db.createVarcharColumn({ ...base, size: c.size, xdefault: c.default, array: c.array });
     case "text":
       return db.createTextColumn(base);
+    case "mediumtext":
+      return db.createMediumtextColumn(base);
     case "int":
       return db.createIntegerColumn({ ...base, xdefault: c.default });
     case "bool":

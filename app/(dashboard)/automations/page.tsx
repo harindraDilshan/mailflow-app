@@ -1,77 +1,81 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { listOwnedLists } from "@/lib/contacts";
-import { listAutomations } from "@/lib/automations";
+import {
+  AUTOMATION_PAGE_SIZE, AUTOMATION_STATUSES, automationTotals, countAutomationsByStatus, searchAutomations,
+} from "@/lib/automations";
+import { flowOf } from "@/lib/automation-flow";
+import { MAX_AUTOMATIONS } from "@/lib/automation-rules";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Plus, Sparkles } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AutomationsView, type AutomationItem } from "./automations-view";
 
-export default async function AutomationsPage() {
-  const user = await requireUser();
-  const [automations, lists] = await Promise.all([listAutomations(user.$id), listOwnedLists(user.$id)]);
-  const listName = new Map(lists.map((l) => [l.$id, l.name]));
+type SP = Record<string, string | string[] | undefined>;
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)?.trim() || undefined;
 
+export default function AutomationsPage({ searchParams }: { searchParams: Promise<SP> }) {
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="max-w-6xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Automations
-          </h1>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Automations</h1>
           <p className="text-xs text-muted-foreground">
-            Automated email sequences triggered by subscriber actions and tags
+            Workflows that send emails and update contacts by themselves, when a person joins a list or gets a tag
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" render={<Link href="/automations/new?template=welcome" />}>
-            <Sparkles className="size-3.5" />
-            <span>Welcome Template</span>
-          </Button>
-          <Button size="sm" render={<Link href="/automations/new" />}>
-            <Plus className="size-3.5" />
-            <span>New Automation</span>
-          </Button>
-        </div>
+        <Button size="sm" render={<Link href="/automations/new" />}>
+          <Plus />
+          New automation
+        </Button>
       </div>
+      <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}>
+        <AutomationsContent searchParams={searchParams} />
+      </Suspense>
+    </div>
+  );
+}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Active Sequences</CardTitle>
-          <CardDescription>
-            Workflows that send automated emails when subscribers join a list or receive tags
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="divide-y divide-border">
-            {automations.length === 0 && (
-              <p className="py-6 text-center text-xs text-muted-foreground">
-                No automations configured yet. Start with the Welcome Template or create a custom flow.
-              </p>
-            )}
-            {automations.map((a) => (
-              <div key={a.$id} className="flex items-center justify-between py-3 text-xs">
-                <div>
-                  <Link
-                    href={`/automations/${a.$id}`}
-                    className="font-medium text-foreground hover:underline"
-                  >
-                    {a.name}
-                  </Link>
-                  <p className="text-[11px] text-muted-foreground">
-                    {a.triggerType === "list_joined"
-                      ? `Trigger: Joins "${listName.get(a.triggerValue) ?? "—"}"`
-                      : `Trigger: Tagged with "${a.triggerValue}"`}
-                  </p>
-                </div>
-                <Badge variant={a.status === "active" ? "default" : "outline"} className="text-[10px]">
-                  {a.status}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+async function AutomationsContent({ searchParams }: { searchParams: Promise<SP> }) {
+  const raw = await searchParams;
+  const status = one(raw.status);
+  const view = {
+    q: one(raw.q),
+    status: status && (AUTOMATION_STATUSES as readonly string[]).includes(status) ? status : undefined,
+    page: Math.max(1, parseInt(one(raw.page) ?? "1", 10) || 1),
+  };
+
+  const user = await requireUser();
+  const [result, counts, lists] = await Promise.all([
+    searchAutomations(user.$id, view),
+    countAutomationsByStatus(user.$id, view.q),
+    listOwnedLists(user.$id),
+  ]);
+  const totals = await Promise.all(result.rows.map((a) => automationTotals(a.$id)));
+  const listName = new Map(lists.map((l) => [l.$id, l.name]));
+
+  const rows: AutomationItem[] = result.rows.map((a, i) => ({
+    id: a.$id,
+    name: a.name,
+    status: a.status,
+    trigger:
+      a.triggerType === "list_joined"
+        ? `When someone joins "${listName.get(a.triggerValue) ?? "a deleted list"}"`
+        : `When the tag "${a.triggerValue}" is added`,
+    steps: flowOf(a).nodes.length - 1,
+    active: totals[i].active,
+    completed: totals[i].completed,
+    sent: totals[i].sent,
+    updatedAt: a.$updatedAt,
+  }));
+
+  return (
+    <div className="space-y-2">
+      <AutomationsView view={view} rows={rows} total={result.total} counts={counts} pageSize={AUTOMATION_PAGE_SIZE} />
+      <p className="text-[11px] text-muted-foreground">
+        {counts.all} of {MAX_AUTOMATIONS} automations used.
+      </p>
     </div>
   );
 }

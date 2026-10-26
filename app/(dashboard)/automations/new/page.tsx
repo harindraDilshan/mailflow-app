@@ -1,49 +1,40 @@
 import { Suspense } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { listOwnedLists } from "@/lib/contacts";
-import { WELCOME_SERIES } from "@/lib/automation-templates";
-import { AutomationForm } from "../automation-form";
-import { saveAutomation } from "../actions";
+import { AUTOMATION_RECIPES } from "@/lib/automation-templates";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { NewAutomationForm } from "./new-automation-form";
 
-export default function NewAutomationPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ template?: string }>;
-}) {
+export default function NewAutomationPage({ searchParams }: { searchParams: Promise<{ template?: string }> }) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-64 items-center justify-center text-xs text-muted-foreground">
-          Loading automation setup...
+    <div className="max-w-3xl space-y-6">
+      <div className="space-y-3">
+        <Button variant="ghost" size="sm" className="-ml-2" render={<Link href="/automations" />}>
+          <ArrowLeft />
+          Automations
+        </Button>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">New automation</h1>
+          <p className="text-xs text-muted-foreground">
+            Choose a starting point and a trigger. Then build the workflow on the canvas.
+          </p>
         </div>
-      }
-    >
-      <NewAutomationContent searchParams={searchParams} />
-    </Suspense>
+      </div>
+      <Suspense fallback={<Skeleton className="h-96 w-full rounded-xl" />}>
+        <NewContent searchParams={searchParams} />
+      </Suspense>
+    </div>
   );
 }
 
-async function NewAutomationContent({
-  searchParams,
-}: {
-  searchParams: Promise<{ template?: string }>;
-}) {
+async function NewContent({ searchParams }: { searchParams: Promise<{ template?: string }> }) {
   const { template } = await searchParams;
   const user = await requireUser();
   const lists = (await listOwnedLists(user.$id)).map((l) => ({ id: l.$id, name: l.name }));
+  const initial = AUTOMATION_RECIPES.some((r) => r.id === template) ? template! : AUTOMATION_RECIPES[0].id;
 
-  return (
-    <div>
-      <h1 className="mb-4 text-2xl font-semibold">
-        {template === "welcome" ? "New automation: welcome series" : "New automation"}
-      </h1>
-      {lists.length === 0 && <p className="mb-4 text-sm text-muted-foreground">Create a list first.</p>}
-      <AutomationForm
-        action={saveAutomation}
-        lists={lists}
-        initialSteps={template === "welcome" ? WELCOME_SERIES : []}
-        locked={false}
-      />
-    </div>
-  );
+  return <NewAutomationForm lists={lists} recipes={AUTOMATION_RECIPES} initialRecipe={initial} />;
 }

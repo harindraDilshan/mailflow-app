@@ -21,7 +21,7 @@ import { plural } from "@/lib/format";
 import {
   cancelSchedule, deleteCampaign, duplicateCampaign, scheduleCampaign, sendCampaign, sendTestEmail,
 } from "../actions";
-import { runAction } from "../run-action";
+import { runAction } from "@/components/run-action";
 
 const run = runAction;
 

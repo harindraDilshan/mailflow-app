@@ -1,8 +1,13 @@
 import { toast } from "sonner";
-import type { ActionResult } from "./actions";
 
-// Runs a campaign server action and shows its message. Returns the result, or null after an error.
-export async function runAction(action: (fd: FormData) => Promise<ActionResult>, fields: Record<string, string>) {
+/**
+ * Runs a server action that returns { ok, message }, and shows the message as a toast.
+ * Returns the result, or null after an error.
+ */
+export async function runAction<R extends { ok: boolean; message: string }>(
+  action: (fd: FormData) => Promise<R>,
+  fields: Record<string, string>
+) {
   const fd = new FormData();
   for (const [k, v] of Object.entries(fields)) fd.append(k, v);
   try {
