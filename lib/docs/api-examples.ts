@@ -1,176 +1,186 @@
-import { buildEmbedSnippet } from "@/lib/embed";
+// Code samples for the API docs, the API keys page, and the sign-up form page.
+// `listId` and `key` are the user's own values when known, so samples can run as they are.
 
-export function getApiExamples(appUrl: string) {
-  const base = appUrl.replace(/\/$/, "");
+export type SampleContext = { base: string; listId: string; key?: string };
 
-  return {
-    curlSecret: `curl -X POST "${base}/api/v1/subscribe" \\
-  -H "Authorization: Bearer YOUR_SECRET_KEY" \\
+const SECRET = "YOUR_SECRET_KEY";
+const PUBLIC = "YOUR_PUBLIC_KEY";
+
+/** POST /api/v1/subscribe from a server, with a secret key. */
+export function subscribeSamples({ base, listId, key = SECRET }: SampleContext) {
+  const url = `${base}/api/v1/subscribe`;
+  return [
+    {
+      label: "cURL",
+      code: `curl -X POST ${url} \\
+  -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "email": "subscriber@example.com",
-    "name": "Alex Smith",
-    "tags": ["newsletter", "checkout"],
-    "listIds": ["LIST_ID"]
+    "email": "jane@example.com",
+    "name": "Jane Smith",
+    "tags": ["checkout"],
+    "listIds": ["${listId}"]
   }'`,
-
-    curlPublic: `curl -X POST "${base}/api/v1/subscribe" \\
-  -H "Origin: https://www.example.com" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "key": "YOUR_PUBLIC_KEY",
-    "email": "subscriber@example.com",
-    "name": "Alex Smith"
-  }'`,
-
-    curlLists: `curl -X GET "${base}/api/v1/lists" \\
-  -H "Authorization: Bearer YOUR_SECRET_KEY"`,
-
-    jsBrowser: `// Run this in the browser on an allowed website:
-fetch("${base}/api/v1/subscribe", {
+    },
+    {
+      label: "Node.js",
+      code: `// Node.js 18 or newer. Keep the key in an environment variable.
+const res = await fetch("${url}", {
   method: "POST",
   headers: {
-    "Content-Type": "application/json"
+    Authorization: \`Bearer \${process.env.MAILFLOW_SECRET_KEY}\`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    key: "YOUR_PUBLIC_KEY",
-    email: "subscriber@example.com",
-    name: "Alex Smith"
-  })
-})
-  .then((res) => res.json())
-  .then((data) => {
-    if (data.error) {
-      console.error("Subscription error:", data.error.message);
-    } else {
-      console.log("Success:", data.message);
-    }
-  })
-  .catch((err) => console.error("Network error:", err));`,
+    email: "jane@example.com",
+    name: "Jane Smith",
+    tags: ["checkout"],
+    listIds: ["${listId}"],
+  }),
+});
 
-    nodeServer: `// Node.js 18+ (Fetch API)
-async function addSubscriber() {
-  const response = await fetch("${base}/api/v1/subscribe", {
-    method: "POST",
-    headers: {
-      "Authorization": "Bearer YOUR_SECRET_KEY",
-      "Content-Type": "application/json"
+const data = await res.json();
+if (!res.ok) throw new Error(data.error.message);
+console.log(data.status); // "pending_confirmation"`,
     },
-    body: JSON.stringify({
-      email: "subscriber@example.com",
-      name: "Alex Smith",
-      tags: ["api-signup"],
-      listIds: ["LIST_ID"]
-    })
-  });
+    {
+      label: "Python",
+      code: `import os
+import requests
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error.message);
-  }
-  return data;
-}`,
-
-    pythonServer: `import requests
-
-url = "${base}/api/v1/subscribe"
-headers = {
-    "Authorization": "Bearer YOUR_SECRET_KEY",
-    "Content-Type": "application/json"
-}
-payload = {
-    "email": "subscriber@example.com",
-    "name": "Alex Smith",
-    "tags": ["python-backend"],
-    "listIds": ["LIST_ID"]
-}
-
-response = requests.post(url, json=payload, headers=headers)
-data = response.json()
-
-if response.status_code == 200:
-    print("Success:", data["message"])
-else:
-    print("Error:", data["error"]["code"], "-", data["error"]["message"])`,
-
-    phpServer: `<?php
-$ch = curl_init("${base}/api/v1/subscribe");
-
-$payload = json_encode([
-    "email" => "subscriber@example.com",
-    "name" => "Alex Smith",
-    "tags" => ["php-customer"],
-    "listIds" => ["LIST_ID"]
+res = requests.post(
+    "${url}",
+    headers={"Authorization": f"Bearer {os.environ['MAILFLOW_SECRET_KEY']}"},
+    json={
+        "email": "jane@example.com",
+        "name": "Jane Smith",
+        "tags": ["checkout"],
+        "listIds": ["${listId}"],
+    },
+    timeout=10,
+)
+res.raise_for_status()
+print(res.json()["status"])  # "pending_confirmation"`,
+    },
+    {
+      label: "PHP",
+      code: `<?php
+$ch = curl_init("${url}");
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer " . getenv("MAILFLOW_SECRET_KEY"),
+        "Content-Type: application/json",
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        "email" => "jane@example.com",
+        "name" => "Jane Smith",
+        "tags" => ["checkout"],
+        "listIds" => ["${listId}"],
+    ]),
 ]);
+$data = json_decode(curl_exec($ch), true);
+echo $data["status"]; // "pending_confirmation"`,
+    },
+  ];
+}
 
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "Authorization: Bearer YOUR_SECRET_KEY",
-    "Content-Type: application/json"
-]);
+/** POST /api/v1/subscribe from a browser, with a public key (your own form code). */
+export function browserSubscribeSamples({ base }: { base: string }) {
+  return [
+    {
+      label: "JavaScript",
+      code: `// On a website that is allowed for the public key.
+const res = await fetch("${base}/api/v1/subscribe", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    key: "${PUBLIC}",
+    email: form.email.value,
+    name: form.name.value,
+  }),
+});
+const data = await res.json();
+message.textContent = data.error ? data.error.message : "Check your inbox to confirm.";`,
+    },
+    {
+      label: "React",
+      code: `function SignupForm() {
+  const [message, setMessage] = useState("");
 
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-$data = json_decode($response, true);
-if ($httpCode === 200) {
-    echo "Success: " . $data["message"] . "\\n";
-} else {
-    echo "Error: " . $data["error"]["message"] . "\\n";
-}`,
-
-    embedSnippet: buildEmbedSnippet(base, "YOUR_PUBLIC_KEY"),
-
-    retrySnippet: `async function subscribeWithRetry(payload, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  async function onSubmit(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
     const res = await fetch("${base}/api/v1/subscribe", {
       method: "POST",
-      headers: {
-        "Authorization": "Bearer YOUR_SECRET_KEY",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "${PUBLIC}", email: form.get("email") }),
     });
-
-    if (res.status === 429) {
-      const waitSeconds = parseInt(res.headers.get("Retry-After") || "5", 10);
-      console.warn(\`Rate limited. Waiting \${waitSeconds} seconds before attempt \${attempt}...\`);
-      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
-      continue;
-    }
-
-    return res.json();
+    const data = await res.json();
+    setMessage(data.error ? data.error.message : "Check your inbox to confirm.");
   }
-  throw new Error("Maximum retry attempts reached.");
-}`,
 
-    subscribeSuccess: `{
-  "status": "pending_confirmation",
-  "message": "Check your email to confirm your subscription."
+  return (
+    <form onSubmit={onSubmit}>
+      <input name="email" type="email" required placeholder="Your email" />
+      <button type="submit">Subscribe</button>
+      <p role="status">{message}</p>
+    </form>
+  );
 }`,
+    },
+  ];
+}
 
-    listsSuccess: `{
-  "lists": [
+/** GET /api/v1/lists. */
+export function listsSamples({ base, key = SECRET }: SampleContext) {
+  const url = `${base}/api/v1/lists`;
+  return [
+    { label: "cURL", code: `curl ${url} \\\n  -H "Authorization: Bearer ${key}"` },
     {
-      "id": "673f8a9e001a2b3c4d5e",
-      "name": "Weekly Newsletter"
+      label: "Node.js",
+      code: `const res = await fetch("${url}", {
+  headers: { Authorization: \`Bearer \${process.env.MAILFLOW_SECRET_KEY}\` },
+});
+const { lists } = await res.json();`,
     },
     {
-      "id": "673f8aa5002b3c4d5e6f",
-      "name": "Product Announcements"
-    }
-  ]
-}`,
+      label: "Python",
+      code: `import os, requests
 
-    errorSample: `{
+res = requests.get("${url}", headers={"Authorization": f"Bearer {os.environ['MAILFLOW_SECRET_KEY']}"}, timeout=10)
+lists = res.json()["lists"]`,
+    },
+    {
+      label: "PHP",
+      code: `<?php
+$ch = curl_init("${url}");
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => ["Authorization: Bearer " . getenv("MAILFLOW_SECRET_KEY")],
+]);
+$lists = json_decode(curl_exec($ch), true)["lists"];`,
+    },
+  ];
+}
+
+export const SUBSCRIBE_RESPONSE = `{
+  "status": "pending_confirmation",
+  "message": "Check your email to confirm your subscription."
+}`;
+
+export const LISTS_RESPONSE = `{
+  "lists": [
+    { "id": "665f1c2a0012ab34cd56", "name": "Newsletter" },
+    { "id": "665f1c4b0034ef56ab78", "name": "Product updates" }
+  ]
+}`;
+
+export const ERROR_RESPONSE = `{
   "error": {
     "code": "invalid_email",
     "message": "Enter a valid email address.",
-    "requestId": "req_8f14a6b29c0d3e5f"
+    "requestId": "req_3f9a1c7e5b2d4f60"
   }
-}`,
-  };
-}
+}`;

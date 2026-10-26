@@ -29,6 +29,11 @@ const specs: Spec[] = [
       { key: "pageText", type: "varchar", size: 500 },
       { key: "fromName", type: "varchar", size: 100 },
       { key: "fromEmail", type: "varchar", size: 254 },
+      // The design of the sign-up form (lib/forms.ts). Empty = the default.
+      { key: "formButton", type: "varchar", size: 40 },
+      { key: "formNameField", type: "varchar", size: 10 }, // off | optional | required
+      { key: "formSuccess", type: "varchar", size: 300 },
+      { key: "formColor", type: "varchar", size: 7 }, // #rrggbb
     ],
     indexes: [{ key: "idx_account", type: "key", columns: ["accountId"] }],
   },

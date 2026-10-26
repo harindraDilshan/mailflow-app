@@ -37,6 +37,10 @@ export type ListRow = {
   pageText?: string | null;
   fromName?: string | null;
   fromEmail?: string | null;
+  formButton?: string | null;
+  formNameField?: string | null;
+  formSuccess?: string | null;
+  formColor?: string | null;
 };
 
 function isConflict(e: unknown) {
@@ -361,4 +365,44 @@ export async function getContactActivity(accountId: string, contactId: string) {
     console.error("Could not load contact activity", e);
     return null;
   }
+}
+
+// ---------- sign-ups from forms and the API (the "is my form working?" panel) ----------
+export const SIGNUP_SOURCES = ["hosted", "form", "api"];
+
+export async function signupStats(accountId: string, listId: string) {
+  const { tablesDB } = createAdminClient();
+  const base = [
+    Query.equal("accountId", accountId),
+    Query.contains("listIds", listId),
+    Query.equal("source", SIGNUP_SOURCES),
+  ];
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const [recent, last30, confirmed30] = await Promise.all([
+    tablesDB.listRows({ databaseId: DB_ID, tableId: CONTACTS_TABLE, queries: [...base, Query.orderDesc("$createdAt"), Query.limit(5)] }),
+    tablesDB.listRows({ databaseId: DB_ID, tableId: CONTACTS_TABLE, queries: [...base, Query.greaterThanEqual("$createdAt", since), Query.limit(1)] }),
+    tablesDB.listRows({
+      databaseId: DB_ID,
+      tableId: CONTACTS_TABLE,
+      queries: [...base, Query.greaterThanEqual("$createdAt", since), Query.equal("status", "active"), Query.limit(1)],
+    }),
+  ]);
+  return { recent: recent.rows as unknown as ContactRow[], last30: last30.total, confirmed30: confirmed30.total };
+}
+
+// Sign-ups to one list in the last `days` days (the overview of the sign-up forms).
+export async function countRecentSignups(accountId: string, listId: string, days = 30) {
+  const { tablesDB } = createAdminClient();
+  const res = await tablesDB.listRows({
+    databaseId: DB_ID,
+    tableId: CONTACTS_TABLE,
+    queries: [
+      Query.equal("accountId", accountId),
+      Query.contains("listIds", listId),
+      Query.equal("source", SIGNUP_SOURCES),
+      Query.greaterThanEqual("$createdAt", new Date(Date.now() - days * 86_400_000).toISOString()),
+      Query.limit(1),
+    ],
+  });
+  return res.total;
 }

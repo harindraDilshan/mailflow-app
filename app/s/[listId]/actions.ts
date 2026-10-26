@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { rateLimit } from "@/lib/rate-limit";
 import { getList, subscribeEmail } from "@/lib/subscribe";
 import { clientIp } from "@/lib/api-helpers";
+import { designOf } from "@/lib/forms";
 
 type State = { error?: string; message?: string } | undefined;
 const PENDING = "Check your email to confirm your subscription.";
@@ -17,6 +18,9 @@ export async function hostedSubscribe(_: State, formData: FormData): Promise<Sta
   const list = await getList(String(formData.get("listId") ?? ""));
   if (!list || !list.hostedEnabled || !list.fromEmail) {
     return { error: "This sign-up page is not available." };
+  }
+  if (designOf(list).nameField === "required" && !String(formData.get("name") ?? "").trim()) {
+    return { error: "Enter your name." };
   }
 
   const result = await subscribeEmail({

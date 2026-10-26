@@ -1,14 +1,16 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getList } from "@/lib/subscribe";
-import { HostedForm } from "./hosted-form";
+import { designOf } from "@/lib/forms";
+import { SignupForm } from "@/components/forms/signup-card";
 
 export const metadata = { robots: "noindex" };
 
+// The hosted sign-up page of a list. Light on purpose: it shows the customer's own colors.
 export default function HostedPage({ params }: { params: Promise<{ listId: string }> }) {
   return (
-    <main className="mx-auto mt-20 max-w-md p-6">
-      <Suspense fallback={<p className="text-sm text-gray-500">Loading…</p>}>
+    <main className="flex min-h-screen items-center justify-center bg-zinc-100 p-4">
+      <Suspense fallback={<div className="h-80 w-full max-w-sm animate-pulse rounded-2xl bg-white" />}>
         <HostedContent params={params} />
       </Suspense>
     </main>
@@ -20,11 +22,5 @@ async function HostedContent({ params }: { params: Promise<{ listId: string }> }
   const list = await getList(listId);
   if (!list || !list.hostedEnabled || !list.fromEmail) notFound();
 
-  return (
-    <>
-      <h1 className="mb-2 text-2xl font-semibold">{list.pageTitle || list.name}</h1>
-      {list.pageText && <p className="mb-6 text-sm text-gray-600">{list.pageText}</p>}
-      <HostedForm listId={list.$id} />
-    </>
-  );
+  return <SignupForm listId={list.$id} design={designOf(list)} />;
 }
