@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { renderEmail, extractLinks } from "./render";
+import { renderEmail, extractLinks, htmlToText } from "./render";
 
 it("tracks body links but not mailto or the unsubscribe link", () => {
   const out = renderEmail(
@@ -16,4 +16,22 @@ it("tracks body links but not mailto or the unsubscribe link", () => {
 
 it("lists each link once", () => {
   expect(extractLinks('<a href="https://a.com">1</a><a href="https://a.com">2</a>')).toEqual(["https://a.com"]);
+});
+it("adds hidden preview text after <body> and fills merge tags in it", () => {
+  const out = renderEmail("<html><body><p>Hi</p></body></html>", { name: "Ann <b>", email: "a@x.com" }, "#", undefined, {
+    previewText: "Hello {{name}}",
+  });
+  expect(out).toMatch(/<body><div style="display:none[^"]*">Hello Ann &lt;b&gt;/);
+  expect(out.indexOf("Hello Ann")).toBeLessThan(out.indexOf("<p>Hi</p>"));
+});
+
+it("adds no preview block without preview text", () => {
+  expect(renderEmail("<p>Hi</p>", { email: "a@x.com" }, "#")).not.toContain("display:none;max-height:0");
+});
+
+it("keeps the preview filler out of the plain-text version", () => {
+  const html = renderEmail("<p>Body</p>", { email: "a@x.com" }, "#", undefined, { previewText: "Soon" });
+  const text = htmlToText(html);
+  expect(text.startsWith("Soon Body")).toBe(true);
+  expect(text).not.toContain("&zwnj;");
 });

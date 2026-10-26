@@ -4,6 +4,7 @@ export type EmailMessage = {
   subject: string;
   html: string;
   text?: string;
+  replyTo?: string;
   headers?: Record<string, string>;
   tags?: Record<string, string>;
 };

@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { STATUSES, type ContactStatus } from "@/lib/contact-rules";
 import { statusMeta } from "@/lib/contact-status";
 import { formatNumber, plural } from "@/lib/format";
-import { DebouncedInput } from "./debounced-input";
+import { DebouncedInput } from "@/components/debounced-input";
 import { hasFilters, type ContactsView } from "./view";
 
 const TABS = ["all", ...STATUSES] as const;
