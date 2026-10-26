@@ -15,6 +15,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ export function Sidebar({ collapsed = false, onToggleCollapse, className }: Side
         { label: placeholders.nav.domains, href: "/domains", icon: Globe },
         { label: placeholders.nav.developers, href: "/developers", icon: Key },
         { label: placeholders.nav.docs, href: "/docs/api", icon: BookOpen },
+        { label: placeholders.nav.settings, href: "/settings", icon: Settings },
       ],
     },
   ];

@@ -113,6 +113,13 @@ export function Header({ onMenuToggle, userEmail, onSignOut }: HeaderProps) {
               Sending Domains
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem render={<Link href="/settings" />}>
+              Account settings
+            </DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/settings#two-factor" />}>
+              2-step verification
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             {onSignOut ? (
               <DropdownMenuItem onClick={onSignOut} className="cursor-pointer text-destructive">
                 Log out

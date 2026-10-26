@@ -54,6 +54,7 @@ export const placeholders = {
     domains: "Sending Domains",
     developers: "API & Developers",
     docs: "API Docs",
+    settings: "Settings",
     group1: "Outreach",
     group2: "Audience",
     group3: "Configuration",

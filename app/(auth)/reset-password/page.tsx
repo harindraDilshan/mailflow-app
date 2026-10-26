@@ -1,51 +1,34 @@
 import { Suspense } from "react";
-import { AuthForm } from "@/components/auth-form";
-import { resetPassword } from "../actions";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ResetPasswordForm } from "../auth-forms";
 
-export default function ResetPasswordPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ userId?: string; secret?: string }>;
-}) {
+type SP = Promise<{ userId?: string; secret?: string }>;
+
+export default function ResetPasswordPage({ searchParams }: { searchParams: SP }) {
   return (
-    <Suspense
-      fallback={
-        <Card>
-          <CardHeader>
-            <CardTitle>Choose New Password</CardTitle>
-            <CardDescription>Loading...</CardDescription>
-          </CardHeader>
-          <CardContent className="h-40 flex items-center justify-center text-xs text-muted-foreground">
-            Loading...
-          </CardContent>
-        </Card>
-      }
-    >
+    <Suspense fallback={<Skeleton className="h-80 w-full rounded-xl" />}>
       <ResetPasswordContent searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function ResetPasswordContent({
-  searchParams,
-}: {
-  searchParams: Promise<{ userId?: string; secret?: string }>;
-}) {
+async function ResetPasswordContent({ searchParams }: { searchParams: SP }) {
   const { userId, secret } = await searchParams;
+
   if (!userId || !secret) {
     return (
       <Card>
-        <CardContent className="pt-6">
-          <p className="text-xs text-muted-foreground">
-            This password recovery link is invalid or has expired.
-          </p>
+        <CardHeader>
+          <CardTitle>This link does not work</CardTitle>
+          <CardDescription>The link is not complete, or it is too old. A reset link works for 1 hour, one time.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button className="w-full" render={<Link href="/forgot-password" />}>
+            Ask for a new link
+          </Button>
         </CardContent>
       </Card>
     );
@@ -54,16 +37,11 @@ async function ResetPasswordContent({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Choose New Password</CardTitle>
-        <CardDescription>Enter a strong password of at least 8 characters</CardDescription>
+        <CardTitle>Choose a new password</CardTitle>
+        <CardDescription>Use a password that you do not use on other websites.</CardDescription>
       </CardHeader>
       <CardContent>
-        <AuthForm
-          action={resetPassword}
-          submitLabel="Save New Password"
-          hidden={{ userId, secret }}
-          fields={[{ name: "password", label: "New Password", type: "password" }]}
-        />
+        <ResetPasswordForm userId={userId} secret={secret} />
       </CardContent>
     </Card>
   );

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Header } from "@/src/components/blocks/header";
 import { Sidebar } from "@/src/components/blocks/sidebar";
 import { signOut } from "@/app/(auth)/actions";
+import { ResendVerificationButton } from "@/components/auth/resend-verification-button";
 import { cn } from "@/lib/utils";
 
 interface DashboardShellProps {
@@ -58,8 +59,12 @@ export function DashboardShell({
         {/* Main Content Area */}
         <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8">
           {!isVerified && (
-            <div className="mb-6 rounded-lg border border-border bg-muted/50 p-4 text-xs text-muted-foreground">
-              Please verify your email address.
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/50 p-4 text-xs text-muted-foreground">
+              <span>
+                <span className="font-medium text-foreground">Verify your email address.</span> We sent a link to{" "}
+                {userEmail}. You need it to send campaigns and turn on automations.
+              </span>
+              <ResendVerificationButton />
             </div>
           )}
           {children}
