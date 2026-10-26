@@ -101,6 +101,7 @@ const specs: Spec[] = [
       { key: "idx_opened", type: "key", columns: ["openedAt"] },
       { key: "idx_clicked", type: "key", columns: ["clickedAt"] },
       { key: "idx_campaign_step", type: "key", columns: ["campaignId", "stepIndex"] },
+      { key: "idx_account_contact", type: "key", columns: ["accountId", "contactId"] }, // contact email history
     ],
   },
   {

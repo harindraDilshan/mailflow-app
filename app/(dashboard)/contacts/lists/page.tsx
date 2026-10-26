@@ -1,101 +1,88 @@
+import { Suspense } from "react";
 import Link from "next/link";
-import { AuthForm } from "@/components/auth-form";
+import { ArrowLeft, ListFilter } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { countContactsInList, listOwnedLists } from "@/lib/contacts";
-import { createList, deleteList } from "../actions";
+import { MAX_LISTS } from "@/lib/contact-rules";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ListFilter, Plus, Globe } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ListsTable, type ListSummary } from "./lists-table";
+import { NewListButton } from "./list-dialog";
 
-export default async function ListsPage() {
-  const user = await requireUser();
-  const lists = await listOwnedLists(user.$id);
-  const counts = await Promise.all(lists.map((l) => countContactsInList(user.$id, l.$id)));
-
+export default function ListsPage() {
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Subscriber Lists
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Organize and segment contacts for targeted email broadcasts
-          </p>
+    <div className="max-w-4xl space-y-6">
+      <div className="space-y-3">
+        <Button variant="ghost" size="sm" className="-ml-2" render={<Link href="/contacts" />}>
+          <ArrowLeft />
+          Contacts
+        </Button>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Lists</h1>
+            <p className="text-xs text-muted-foreground">
+              Group contacts by topic or product. Send campaigns to a list, or start an automation when someone joins it.
+            </p>
+          </div>
+          <NewListButton />
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ListFilter className="size-4" />
-            <span>All Lists</span>
-          </CardTitle>
-          <CardDescription>
-            Lists created to segment your audience and trigger automations
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="divide-y divide-border">
-            {lists.length === 0 && (
-              <p className="py-6 text-center text-xs text-muted-foreground">
-                No subscriber lists created yet. Create a list below to begin organizing contacts.
-              </p>
-            )}
-            {lists.map((l, i) => (
-              <div key={l.$id} className="flex items-center justify-between py-3 text-xs">
-                <div>
-                  <Link
-                    href={`/contacts?list=${l.$id}`}
-                    className="font-medium text-foreground hover:underline"
-                  >
-                    {l.name}
-                  </Link>
-                  <span className="ml-2 font-mono text-[11px] text-muted-foreground">
-                    ({counts[i]} contacts)
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    render={<Link href={`/contacts/lists/${l.$id}/collect`} />}
-                  >
-                    <Globe className="size-3" />
-                    <span>Hosted Form</span>
-                  </Button>
-                  <form action={deleteList}>
-                    <input type="hidden" name="id" value={l.$id} />
-                    <Button type="submit" variant="ghost" size="xs" className="text-destructive">
-                      Delete
-                    </Button>
-                  </form>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+        <ListsContent />
+      </Suspense>
+    </div>
+  );
+}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plus className="size-4" />
-            <span>Create a Subscriber List</span>
-          </CardTitle>
-          <CardDescription>
-            Give your list a name such as "Weekly Newsletter" or "Product Announcements"
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AuthForm
-            action={createList}
-            submitLabel="Create List"
-            fields={[{ name: "name", label: "List name", placeholder: "e.g. Early Access VIPs" }]}
-          />
+async function ListsContent() {
+  const user = await requireUser();
+  const lists = await listOwnedLists(user.$id);
+
+  const summaries: ListSummary[] = await Promise.all(
+    lists.map(async (l) => {
+      const [active, total] = await Promise.all([
+        countContactsInList(user.$id, l.$id, "active"),
+        countContactsInList(user.$id, l.$id),
+      ]);
+      return {
+        id: l.$id,
+        name: l.name,
+        createdAt: l.$createdAt,
+        active,
+        total,
+        signupOn: Boolean(l.hostedEnabled && l.fromEmail),
+      };
+    })
+  );
+
+  if (summaries.length === 0) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full border border-border bg-muted">
+            <ListFilter className="size-5 text-muted-foreground" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-sm font-medium">No lists yet</h2>
+            <p className="max-w-sm text-xs text-muted-foreground">
+              Create your first list, for example &ldquo;Weekly newsletter&rdquo; or &ldquo;Product updates&rdquo;.
+            </p>
+          </div>
+          <NewListButton />
         </CardContent>
       </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <ListsTable lists={summaries} />
+      <p className="text-[11px] text-muted-foreground">
+        {summaries.length} of {MAX_LISTS} lists. &ldquo;Active&rdquo; contacts get your campaigns.
+        &ldquo;All contacts&rdquo; also counts pending, unsubscribed, and bounced contacts.
+      </p>
     </div>
   );
 }
