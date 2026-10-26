@@ -1,220 +1,132 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { ListFilter, Plus, Upload } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { listOwnedLists, searchContacts } from "@/lib/contacts";
-import { PAGE_SIZE, STATUSES } from "@/lib/contact-rules";
-import { ContactsTable } from "./contacts-table";
+import { countContacts, countContactsByStatus, listOwnedLists, pageSizeOf, searchContacts } from "@/lib/contacts";
+import { MAX_CONTACTS } from "@/lib/contact-rules";
+import { formatNumber } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  bulkDeleteContacts,
-  deleteAllMatchingContacts,
-  bulkArchiveContacts,
-  bulkUnarchiveContacts,
-} from "./actions";
-import { Plus, Upload, ListFilter } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ContactsManager } from "./contacts-manager";
+import { parseView, type ContactItem } from "./view";
 
 type SP = Record<string, string | string[] | undefined>;
-const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export default function ContactsPage({ searchParams }: { searchParams: Promise<SP> }) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-64 items-center justify-center text-xs text-muted-foreground">
-          Loading contacts...
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Contacts</h1>
+          <p className="text-xs text-muted-foreground">
+            Manage your audience, subscriber consent, and segmentation
+          </p>
+          <Suspense fallback={<Skeleton className="mt-2 h-3 w-48" />}>
+            <Usage />
+          </Suspense>
         </div>
-      }
-    >
-      <ContactsContent searchParams={searchParams} />
-    </Suspense>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" render={<Link href="/contacts/lists" />}>
+            <ListFilter />
+            Lists
+          </Button>
+          <Button variant="outline" size="sm" render={<Link href="/contacts/import" />}>
+            <Upload />
+            Import CSV
+          </Button>
+          <Button size="sm" render={<Link href="/contacts/new" />}>
+            <Plus />
+            Add contact
+          </Button>
+        </div>
+      </div>
+
+      <Suspense fallback={<ContactsSkeleton />}>
+        <ContactsContent searchParams={searchParams} />
+      </Suspense>
+    </div>
+  );
+}
+
+// "1,234 of 5,000 contacts used" with a thin bar. Archived contacts are not counted.
+async function Usage() {
+  const user = await requireUser();
+  const used = await countContacts(user.$id);
+  const percent = Math.min(100, Math.round((used / MAX_CONTACTS) * 100));
+  return (
+    <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground">
+      <div className="h-1 w-24 overflow-hidden rounded-full bg-muted" aria-hidden>
+        <div
+          className={cn("h-full rounded-full", percent >= 90 ? "bg-destructive" : "bg-primary")}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <span className="tabular-nums">
+        {formatNumber(used)} of {formatNumber(MAX_CONTACTS)} contacts used
+      </span>
+    </div>
   );
 }
 
 async function ContactsContent({ searchParams }: { searchParams: Promise<SP> }) {
-  const raw = await searchParams;
-  const sp = {
-    q: one(raw.q),
-    status: one(raw.status),
-    list: one(raw.list),
-    tag: one(raw.tag),
-    from: one(raw.from),
-    to: one(raw.to),
-  };
-  const page = Math.max(1, parseInt(one(raw.page) ?? "1", 10) || 1);
-
+  const view = parseView(await searchParams);
   const user = await requireUser();
-  const lists = await listOwnedLists(user.$id);
 
-  const { rows, total } = await searchContacts(user.$id, {
-    q: sp.q,
-    status: sp.status,
-    listId: sp.list,
-    tag: sp.tag,
-    from: sp.from,
-    to: sp.to,
-    page,
-  });
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const search = { q: view.q, status: view.status, listId: view.list, tag: view.tag, from: view.from, to: view.to };
+  const [lists, result, counts] = await Promise.all([
+    listOwnedLists(user.$id),
+    searchContacts(user.$id, { ...search, sort: view.sort, page: view.page, pageSize: view.per }),
+    countContactsByStatus(user.$id, search),
+  ]);
 
-  function href(p: number) {
-    const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(sp)) if (v) params.set(k, v);
-    params.set("page", String(p));
-    return `/contacts?${params.toString()}`;
-  }
-
-  const listsForTable = lists.map((l) => ({ id: l.$id, name: l.name }));
-
-  const plainRows = rows.map((c) => ({
+  const rows: ContactItem[] = result.rows.map((c) => ({
     $id: c.$id,
     $createdAt: c.$createdAt,
-    accountId: c.accountId,
     email: c.email,
     name: c.name,
     status: c.status,
     source: c.source,
     tags: c.tags ?? [],
     listIds: c.listIds ?? [],
-    consentAt: c.consentAt,
-    consentUrl: c.consentUrl,
-    consentKeyId: c.consentKeyId,
     note: c.note ?? null,
   }));
 
   return (
-    <div className="space-y-6">
-      {/* Page Title & Actions */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Contacts ({total})
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Manage your audience, subscriber consent, and segmentation
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" render={<Link href="/contacts/lists" />}>
-            <ListFilter className="size-3.5" />
-            <span>Lists</span>
-          </Button>
-          <Button variant="outline" size="sm" render={<Link href="/contacts/import" />}>
-            <Upload className="size-3.5" />
-            <span>Import CSV</span>
-          </Button>
-          <Button size="sm" render={<Link href="/contacts/new" />}>
-            <Plus className="size-3.5" />
-            <span>Add Contact</span>
-          </Button>
-        </div>
+    <ContactsManager
+      view={view}
+      rows={rows}
+      total={result.total}
+      counts={counts}
+      lists={lists.map((l) => ({ id: l.$id, name: l.name }))}
+      pageSize={pageSizeOf(view.per)}
+    />
+  );
+}
+
+function ContactsSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy aria-label="Loading contacts">
+      <div className="flex gap-3">
+        {Array.from({ length: 7 }, (_, i) => (
+          <Skeleton key={i} className="h-6 w-20" />
+        ))}
       </div>
-
-      {/* Filter Form */}
-      <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
-        <form className="flex flex-wrap items-end gap-2.5 text-xs">
-          <div className="w-full sm:w-48">
-            <Input
-              name="q"
-              defaultValue={sp.q}
-              placeholder="Search email or name..."
-              className="h-8 text-xs"
-            />
-          </div>
-          <div className="w-full sm:w-36">
-            <select
-              name="status"
-              defaultValue={sp.status ?? ""}
-              aria-label="Filter by status"
-              className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-            >
-              <option value="">Any status</option>
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="w-full sm:w-36">
-            <select
-              name="list"
-              defaultValue={sp.list ?? ""}
-              aria-label="Filter by list"
-              className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-            >
-              <option value="">Any list</option>
-              {lists.map((l) => (
-                <option key={l.$id} value={l.$id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="w-full sm:w-28">
-            <Input
-              name="tag"
-              defaultValue={sp.tag}
-              placeholder="Tag..."
-              className="h-8 text-xs"
-            />
-          </div>
-          <div className="flex items-center gap-1">
-            <Input
-              name="from"
-              type="date"
-              defaultValue={sp.from}
-              aria-label="Date from"
-              className="h-8 w-32 text-xs"
-            />
-          </div>
-          <div className="flex items-center gap-1">
-            <Input
-              name="to"
-              type="date"
-              defaultValue={sp.to}
-              aria-label="Date to"
-              className="h-8 w-32 text-xs"
-            />
-          </div>
-          <Button size="sm" type="submit">
-            Filter
-          </Button>
-          <Button variant="ghost" size="sm" render={<Link href="/contacts" />}>
-            Clear
-          </Button>
-        </form>
+      <div className="flex flex-wrap gap-2">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-7 w-40" />
+        <Skeleton className="h-7 w-36" />
+        <Skeleton className="h-7 w-72" />
       </div>
-
-      {/* Contacts Table Component */}
-      <ContactsTable
-        rows={plainRows}
-        lists={listsForTable}
-        total={total}
-        filters={sp}
-        bulkDeleteAction={bulkDeleteContacts}
-        deleteAllAction={deleteAllMatchingContacts}
-        bulkArchiveAction={bulkArchiveContacts}
-        bulkUnarchiveAction={bulkUnarchiveContacts}
-      />
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>
-          Page {page} of {pages}
-        </span>
-        <div className="flex items-center gap-2">
-          {page > 1 && (
-            <Button variant="outline" size="xs" render={<Link href={href(page - 1)} />}>
-              ← Previous
-            </Button>
-          )}
-          {page < pages && (
-            <Button variant="outline" size="xs" render={<Link href={href(page + 1)} />}>
-              Next →
-            </Button>
-          )}
-        </div>
+      <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+        {Array.from({ length: 8 }, (_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Skeleton className="size-4" />
+            <Skeleton className="size-6 rounded-full" />
+            <Skeleton className="h-4 w-56" />
+            <Skeleton className="ml-auto h-4 w-16" />
+          </div>
+        ))}
       </div>
     </div>
   );

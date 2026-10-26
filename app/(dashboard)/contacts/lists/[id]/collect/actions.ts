@@ -40,5 +40,6 @@ export async function saveSubscribeSettings(_: State, formData: FormData): Promi
   });
 
   revalidatePath(`/contacts/lists/${list.$id}/collect`);
+  revalidatePath("/contacts/lists"); // the "Sign-up form" column
   return { message: "Saved." };
 }

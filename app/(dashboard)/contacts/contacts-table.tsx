@@ -1,327 +1,231 @@
 "use client";
 
-import { useRef, useState } from "react";
 import Link from "next/link";
-import type { ContactRow } from "@/lib/contacts";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Archive, ArchiveRestore, Copy, MailX, MoreHorizontal, PencilLine, StickyNote, Trash2,
+} from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { placeholders } from "@/src/lib/placeholders";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { StatusBadge } from "@/components/contacts/status-badge";
+import { canArchive, canDelete, canUnarchive, canUnsubscribe, sourceLabel } from "@/lib/contact-status";
+import { formatDate, initials } from "@/lib/format";
+import type { ContactItem, ContactsView } from "./view";
 
-type Filters = {
-  q?: string;
-  status?: string;
-  list?: string;
-  tag?: string;
-  from?: string;
-  to?: string;
-};
+export type RowAction = "copy" | "archive" | "unarchive" | "unsubscribe" | "delete";
+
+// A few chips, then "+3". Clicking a chip filters the table by it.
+function Chips({
+  items,
+  max,
+  variant,
+  onPick,
+  pickLabel,
+}: {
+  items: { key: string; label: string }[];
+  max: number;
+  variant: "outline" | "secondary";
+  onPick: (key: string) => void;
+  pickLabel: (label: string) => string;
+}) {
+  if (items.length === 0) return <span className="text-muted-foreground">—</span>;
+  const rest = items.slice(max);
+  return (
+    <div className="flex max-w-56 flex-wrap items-center gap-1">
+      {items.slice(0, max).map((i) => (
+        <Badge
+          key={i.key}
+          variant={variant}
+          className="max-w-32 cursor-pointer font-normal transition-colors hover:border-foreground/30"
+          title={pickLabel(i.label)}
+          render={<button type="button" onClick={() => onPick(i.key)} />}
+        >
+          <span className="truncate">{i.label}</span>
+        </Badge>
+      ))}
+      {rest.length > 0 && (
+        <Badge variant="ghost" className="font-normal text-muted-foreground" title={rest.map((i) => i.label).join(", ")}>
+          +{rest.length}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+function RowMenu({ c, onAction }: { c: ContactItem; onAction: (action: RowAction, c: ContactItem) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${c.email}`} />}>
+        <MoreHorizontal />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem render={<Link href={`/contacts/${c.$id}`} />}>
+          <PencilLine />
+          View and edit
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onAction("copy", c)}>
+          <Copy />
+          Copy email
+        </DropdownMenuItem>
+        {(canArchive(c.status) || canUnarchive(c.status) || canUnsubscribe(c.status)) && <DropdownMenuSeparator />}
+        {canArchive(c.status) && (
+          <DropdownMenuItem onClick={() => onAction("archive", c)}>
+            <Archive />
+            Archive
+          </DropdownMenuItem>
+        )}
+        {canUnarchive(c.status) && (
+          <DropdownMenuItem onClick={() => onAction("unarchive", c)}>
+            <ArchiveRestore />
+            Unarchive
+          </DropdownMenuItem>
+        )}
+        {canUnsubscribe(c.status) && (
+          <DropdownMenuItem onClick={() => onAction("unsubscribe", c)}>
+            <MailX />
+            Unsubscribe
+          </DropdownMenuItem>
+        )}
+        {canDelete(c.status) && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => onAction("delete", c)}>
+              <Trash2 />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function ContactsTable({
   rows,
-  lists,
-  total,
-  filters,
-  bulkDeleteAction,
-  deleteAllAction,
-  bulkArchiveAction,
-  bulkUnarchiveAction,
+  listNames,
+  selected,
+  allMatching,
+  onToggle,
+  onToggleAll,
+  onFilter,
+  onAction,
 }: {
-  rows: ContactRow[];
-  lists: { id: string; name: string }[];
-  total: number;
-  filters: Filters;
-  bulkDeleteAction: (formData: FormData) => Promise<void>;
-  deleteAllAction: (formData: FormData) => Promise<void>;
-  bulkArchiveAction?: (formData: FormData) => Promise<void>;
-  bulkUnarchiveAction?: (formData: FormData) => Promise<void>;
+  rows: ContactItem[];
+  listNames: Map<string, string>;
+  selected: Set<string>;
+  allMatching: boolean;
+  onToggle: (id: string) => void;
+  onToggleAll: () => void;
+  onFilter: (patch: Partial<ContactsView>) => void;
+  onAction: (action: RowAction, c: ContactItem) => void;
 }) {
-  const listName = new Map(lists.map((l) => [l.id, l.name]));
-
-  const bulkDeleteFormRef = useRef<HTMLFormElement>(null);
-  const bulkArchiveFormRef = useRef<HTMLFormElement>(null);
-  const bulkUnarchiveFormRef = useRef<HTMLFormElement>(null);
-  const allFormRef = useRef<HTMLFormElement>(null);
-
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [selectAllMode, setSelectAllMode] = useState(false);
-
-  const selectable = rows.filter(
-    (c) => c.status === "active" || c.status === "pending" || c.status === "archived"
-  );
-  const allPageSelected =
-    selectable.length > 0 && selectable.every((c) => selected.has(c.$id));
-
-  const showSelectAllPrompt = allPageSelected && !selectAllMode && total > rows.length;
-
-  function toggleAll() {
-    setSelectAllMode(false);
-    setSelected(
-      allPageSelected ? new Set() : new Set(selectable.map((c) => c.$id))
-    );
-  }
-
-  function toggle(id: string) {
-    setSelectAllMode(false);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
-  function clearSelection() {
-    setSelectAllMode(false);
-    setSelected(new Set());
-  }
-
-  function handleBulkDelete() {
-    if (selected.size === 0) return;
-    const noun = selected.size === 1 ? "contact" : "contacts";
-    if (!confirm(`Delete ${selected.size} ${noun}? This action cannot be undone.`)) return;
-    bulkDeleteFormRef.current?.requestSubmit();
-  }
-
-  function handleBulkArchive() {
-    if (selected.size === 0) return;
-    const noun = selected.size === 1 ? "contact" : "contacts";
-    if (!confirm(`Archive ${selected.size} ${noun}?`)) return;
-    bulkArchiveFormRef.current?.requestSubmit();
-  }
-
-  function handleBulkUnarchive() {
-    if (selected.size === 0) return;
-    const noun = selected.size === 1 ? "contact" : "contacts";
-    if (!confirm(`Unarchive ${selected.size} ${noun}?`)) return;
-    bulkUnarchiveFormRef.current?.requestSubmit();
-  }
-
-  function handleDeleteAll() {
-    if (!confirm(`Delete all ${total} matching contacts? This action cannot be undone.`)) return;
-    allFormRef.current?.requestSubmit();
-  }
-
-  const hasArchivedSelected = rows.some(
-    (c) => selected.has(c.$id) && c.status === "archived"
-  );
-  const hasActiveOrPendingSelected = rows.some(
-    (c) => selected.has(c.$id) && (c.status === "active" || c.status === "pending")
-  );
-
-  const showArchive =
-    bulkArchiveAction &&
-    (hasActiveOrPendingSelected || (!hasArchivedSelected && !hasActiveOrPendingSelected));
-  const showUnarchive =
-    bulkUnarchiveAction &&
-    (hasArchivedSelected || (!hasArchivedSelected && !hasActiveOrPendingSelected));
+  const selectedOnPage = rows.filter((c) => allMatching || selected.has(c.$id)).length;
+  const allOnPage = rows.length > 0 && selectedOnPage === rows.length;
 
   return (
-    <div className="space-y-3">
-      {/* ── ID-based bulk delete form (current page selection) ── */}
-      <form ref={bulkDeleteFormRef} action={bulkDeleteAction}>
-        {[...selected].map((id) => (
-          <input key={id} type="hidden" name="ids" value={id} />
-        ))}
-      </form>
-
-      {/* ── ID-based bulk archive form (current page selection) ── */}
-      {bulkArchiveAction && (
-        <form ref={bulkArchiveFormRef} action={bulkArchiveAction}>
-          {[...selected].map((id) => (
-            <input key={id} type="hidden" name="ids" value={id} />
-          ))}
-        </form>
-      )}
-
-      {/* ── ID-based bulk unarchive form (current page selection) ── */}
-      {bulkUnarchiveAction && (
-        <form ref={bulkUnarchiveFormRef} action={bulkUnarchiveAction}>
-          {[...selected].map((id) => (
-            <input key={id} type="hidden" name="ids" value={id} />
-          ))}
-        </form>
-      )}
-
-      {/* ── Filter-based delete-all form (all matching contacts) ── */}
-      <form ref={allFormRef} action={deleteAllAction} className="hidden">
-        {filters.q && <input type="hidden" name="q" value={filters.q} />}
-        {filters.status && <input type="hidden" name="status" value={filters.status} />}
-        {filters.list && <input type="hidden" name="listId" value={filters.list} />}
-        {filters.tag && <input type="hidden" name="tag" value={filters.tag} />}
-        {filters.from && <input type="hidden" name="from" value={filters.from} />}
-        {filters.to && <input type="hidden" name="to" value={filters.to} />}
-      </form>
-
-      {/* ── Action bar ── */}
-      {selectAllMode ? (
-        <div className="flex items-center gap-3 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
-          <span className="font-medium text-foreground">
-            All {total} matching contacts are selected.
-          </span>
-          <button
-            type="button"
-            onClick={clearSelection}
-            className="text-muted-foreground underline hover:text-foreground"
-          >
-            {placeholders.cancel}
-          </button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="xs"
-            onClick={handleDeleteAll}
-            className="ml-auto"
-          >
-            {placeholders.delete} ({total})
-          </Button>
-        </div>
-      ) : selected.size > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
-          <span className="font-medium text-foreground">{selected.size} selected</span>
-          {showArchive && (
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              onClick={handleBulkArchive}
-            >
-              Archive
-            </Button>
-          )}
-          {showUnarchive && (
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              onClick={handleBulkUnarchive}
-            >
-              Unarchive
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="destructive"
-            size="xs"
-            onClick={handleBulkDelete}
-          >
-            Delete selected
-          </Button>
-
-          {showSelectAllPrompt && (
-            <span className="text-muted-foreground">
-              All {rows.length} on this page selected.{" "}
-              <button
-                type="button"
-                onClick={() => setSelectAllMode(true)}
-                className="text-foreground underline"
-              >
-                Select all {total} matching contacts
-              </button>
-            </span>
-          )}
-        </div>
-      ) : null}
-
-      {/* ── Contacts table ── */}
-      <div className="rounded-xl border border-border bg-card shadow-xs">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">
+    <Table>
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="w-10 pl-3">
+            <Checkbox
+              checked={allOnPage}
+              indeterminate={selectedOnPage > 0 && !allOnPage}
+              onCheckedChange={onToggleAll}
+              aria-label="Select all contacts on this page"
+            />
+          </TableHead>
+          <TableHead className="text-xs">Contact</TableHead>
+          <TableHead className="text-xs">Status</TableHead>
+          <TableHead className="hidden text-xs lg:table-cell">Lists</TableHead>
+          <TableHead className="hidden text-xs md:table-cell">Tags</TableHead>
+          <TableHead className="hidden text-xs xl:table-cell">Source</TableHead>
+          <TableHead className="hidden text-xs sm:table-cell">Added</TableHead>
+          <TableHead className="w-10 pr-3">
+            <span className="sr-only">Actions</span>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((c) => {
+          const isSelected = allMatching || selected.has(c.$id);
+          const lists = (c.listIds ?? [])
+            .map((id) => ({ key: id, label: listNames.get(id) ?? "" }))
+            .filter((l) => l.label); // ignore lists that were deleted
+          return (
+            <TableRow key={c.$id} data-state={isSelected ? "selected" : undefined}>
+              <TableCell className="pl-3">
                 <Checkbox
-                  checked={allPageSelected}
-                  onCheckedChange={toggleAll}
-                  disabled={selectable.length === 0}
-                  aria-label="Select all on this page"
+                  checked={isSelected}
+                  onCheckedChange={() => onToggle(c.$id)}
+                  aria-label={`Select ${c.email}`}
                 />
-              </TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Tags</TableHead>
-              <TableHead>Lists</TableHead>
-              <TableHead>Added Date</TableHead>
+              </TableCell>
+              <TableCell className="max-w-72">
+                <div className="flex items-center gap-2.5">
+                  <Avatar size="sm">
+                    <AvatarFallback className="text-[10px]">{initials(c.name, c.email)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <Link href={`/contacts/${c.$id}`} className="truncate text-sm font-medium hover:underline">
+                        {c.name || c.email}
+                      </Link>
+                      {c.note && (
+                        <Tooltip>
+                          <TooltipTrigger
+                            aria-label="Show private note"
+                            className="shrink-0 rounded text-muted-foreground hover:text-foreground"
+                          >
+                            <StickyNote className="size-3.5" />
+                          </TooltipTrigger>
+                          <TooltipContent className="whitespace-pre-wrap">{c.note}</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                    {c.name && <div className="truncate text-xs text-muted-foreground">{c.email}</div>}
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>
+                <StatusBadge status={c.status} />
+              </TableCell>
+              <TableCell className="hidden text-xs lg:table-cell">
+                <Chips
+                  items={lists}
+                  max={2}
+                  variant="outline"
+                  onPick={(list) => onFilter({ list })}
+                  pickLabel={(l) => `Show only contacts in ${l}`}
+                />
+              </TableCell>
+              <TableCell className="hidden text-xs md:table-cell">
+                <Chips
+                  items={(c.tags ?? []).map((t) => ({ key: t, label: t }))}
+                  max={3}
+                  variant="secondary"
+                  onPick={(tag) => onFilter({ tag })}
+                  pickLabel={(t) => `Show only contacts tagged ${t}`}
+                />
+              </TableCell>
+              <TableCell className="hidden text-xs text-muted-foreground xl:table-cell">
+                {sourceLabel(c.source)}
+              </TableCell>
+              <TableCell className="hidden text-xs text-muted-foreground tabular-nums sm:table-cell">
+                {formatDate(c.$createdAt)}
+              </TableCell>
+              <TableCell className="pr-3 text-right">
+                <RowMenu c={c} onAction={onAction} />
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
-                  No contacts found.
-                </TableCell>
-              </TableRow>
-            )}
-            {rows.map((c) => {
-              const canSelect =
-                c.status === "active" || c.status === "pending" || c.status === "archived";
-              return (
-                <TableRow key={c.$id}>
-                  <TableCell>
-                    {canSelect && (
-                      <Checkbox
-                        checked={selected.has(c.$id) || selectAllMode}
-                        onCheckedChange={() => toggle(c.$id)}
-                        aria-label={`Select ${c.email}`}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/contacts/${c.$id}`}
-                      className="font-medium text-foreground hover:underline"
-                    >
-                      {c.email}
-                    </Link>
-                    {c.note && (
-                      <span
-                        title={c.note}
-                        className="ml-1.5 inline-block cursor-help font-mono text-[10px] text-muted-foreground"
-                      >
-                        [note]
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{c.name || "—"}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        c.status === "active"
-                          ? "default"
-                          : c.status === "archived"
-                            ? "outline"
-                            : "secondary"
-                      }
-                      className="text-[10px]"
-                    >
-                      {c.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {(c.tags ?? []).join(", ") || "—"}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {(c.listIds ?? [])
-                      .map((id) => listName.get(id))
-                      .filter(Boolean)
-                      .join(", ") || "—"}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {new Date(c.$createdAt).toLocaleDateString()}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }

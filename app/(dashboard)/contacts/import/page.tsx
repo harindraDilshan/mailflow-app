@@ -1,8 +1,9 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { listOwnedLists } from "@/lib/contacts";
 import { ImportWizard } from "@/app/(dashboard)/contacts/import/import-wizard";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default async function ImportPage() {
   const user = await requireUser();
@@ -10,29 +11,20 @@ export default async function ImportPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Import Contacts
-        </h1>
-        <p className="text-xs text-muted-foreground">
-          Bulk import your existing subscribers and contacts from CSV files
-        </p>
+      <div className="space-y-3">
+        <Button variant="ghost" size="sm" className="-ml-2" render={<Link href="/contacts" />}>
+          <ArrowLeft />
+          Contacts
+        </Button>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Import contacts</h1>
+          <p className="text-xs text-muted-foreground">
+            Add many subscribers at once from a CSV file. Contacts that already exist are skipped, not changed.
+          </p>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Upload className="size-4" />
-            <span>Upload CSV File</span>
-          </CardTitle>
-          <CardDescription>
-            Map your CSV columns (email, name, tags), select lists, and verify subscriber permission.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ImportWizard lists={lists} />
-        </CardContent>
-      </Card>
+      <ImportWizard lists={lists} />
     </div>
   );
 }

@@ -4,7 +4,12 @@ export const MAX_CHUNK = 100;
 export const MAX_TAGS = 20;
 export const MAX_LISTS = 50;
 export const PAGE_SIZE = 25;
+export const PAGE_SIZES = [25, 50, 100] as const;
+export const MAX_PAGE_SIZE = 100; // also the most contacts one bulk action can change
 export const STATUSES = ["active", "pending", "unsubscribed", "bounced", "complained", "archived"] as const;
+export type ContactStatus = (typeof STATUSES)[number];
+export const CONTACT_SORTS = ["newest", "oldest", "email_asc", "email_desc"] as const;
+export type ContactSort = (typeof CONTACT_SORTS)[number];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 

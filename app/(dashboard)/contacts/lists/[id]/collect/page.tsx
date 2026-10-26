@@ -1,11 +1,18 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { CodeBlock } from "@/components/docs/code-block";
 import { requireUser } from "@/lib/auth";
 import { getOwnedList } from "@/lib/contacts";
 import { findPublicKeyForList } from "@/lib/api-keys";
 import { buildEmbedSnippet } from "@/lib/embed";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CollectSettingsForm } from "./settings-form";
 import { saveSubscribeSettings } from "./actions";
 
@@ -13,8 +20,10 @@ export default function CollectPage({ params }: { params: Promise<{ id: string }
   return (
     <Suspense
       fallback={
-        <div className="flex h-64 items-center justify-center text-xs text-muted-foreground">
-          Loading subscribe collection settings...
+        <div className="max-w-3xl space-y-6" aria-busy aria-label="Loading">
+          <Skeleton className="h-7 w-24" />
+          <Skeleton className="h-10 w-80" />
+          <Skeleton className="h-80 w-full rounded-xl" />
         </div>
       }
     >
@@ -32,6 +41,7 @@ async function CollectContent({ params }: { params: Promise<{ id: string }> }) {
   const app = process.env.NEXT_PUBLIC_APP_URL!;
   const hostedUrl = `${app}/s/${list.$id}`;
   const configured = !!list.fromEmail;
+  const hostedOn = !!list.hostedEnabled && configured;
   const pk = configured ? await findPublicKeyForList(user.$id, list.$id) : null;
   const snippet = pk?.publicKey ? buildEmbedSnippet(app, pk.publicKey) : null;
 
@@ -40,74 +50,130 @@ async function CollectContent({ params }: { params: Promise<{ id: string }> }) {
   -H "Content-Type: application/json" \\
   -d '{"email":"jane@example.com","name":"Jane","tags":["website"],"listIds":["${list.$id}"]}'`;
 
+  const link = "underline underline-offset-2 hover:text-foreground";
+
   return (
-    <div className="max-w-3xl space-y-8">
-      <div>
-        <Link href="/contacts/lists" className="text-sm underline">← Lists</Link>
-        <h1 className="mt-2 text-2xl font-semibold">Collect subscribers: {list.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          Everyone who signs up gets a confirmation email first. Only confirmed people receive campaigns.
-        </p>
+    <div className="max-w-3xl space-y-6">
+      <div className="space-y-3">
+        <Button variant="ghost" size="sm" className="-ml-2" render={<Link href="/contacts/lists" />}>
+          <ArrowLeft />
+          Lists
+        </Button>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Collect subscribers</h1>
+            <Badge variant="outline" className="font-normal">
+              {list.name}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Everyone who signs up gets a confirmation email first. Only confirmed people get campaigns.
+          </p>
+        </div>
       </div>
 
-      <section>
-        <h2 className="mb-2 font-medium">1. Settings</h2>
-        <CollectSettingsForm
-          action={saveSubscribeSettings}
-          list={{
-            id: list.$id,
-            hostedEnabled: !!list.hostedEnabled,
-            pageTitle: list.pageTitle ?? "",
-            pageText: list.pageText ?? "",
-            fromName: list.fromName ?? "",
-            fromEmail: list.fromEmail ?? "",
-          }}
-        />
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>1. Settings</CardTitle>
+          <CardDescription>Set the confirmation sender first. All sign-up methods below need it.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CollectSettingsForm
+            action={saveSubscribeSettings}
+            list={{
+              id: list.$id,
+              hostedEnabled: !!list.hostedEnabled,
+              pageTitle: list.pageTitle ?? "",
+              pageText: list.pageText ?? "",
+              fromName: list.fromName ?? "",
+              fromEmail: list.fromEmail ?? "",
+            }}
+          />
+        </CardContent>
+      </Card>
 
-      <section>
-        <h2 className="mb-2 font-medium">2. Hosted link (no code)</h2>
-        {list.hostedEnabled && configured ? (
-          <p className="text-sm">
-            <code className="break-all">{hostedUrl}</code> <CopyButton text={hostedUrl} />
-            <br />
-            <Link href={hostedUrl} target="_blank" className="underline">Open the page</Link>
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">Turn on the page and set a sender above to get your link.</p>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-2 font-medium">3. Embed form (paste into your website)</h2>
-        {snippet ? (
-          <>
-            <textarea readOnly rows={14} value={snippet} className="w-full rounded border p-2 font-mono text-xs" />
-            <CopyButton text={snippet} />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Allowed websites for this key: {(pk?.allowedOrigins ?? []).join(", ") || "none"}.{" "}
-              <Link href="/developers" className="underline">Manage keys</Link>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            2. Hosted sign-up page
+            <Badge variant={hostedOn ? "secondary" : "outline"} className="font-normal">
+              {hostedOn ? "On" : "Off"}
+            </Badge>
+          </CardTitle>
+          <CardDescription>Share this link in your social profiles, emails, or QR codes. No code needed.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {hostedOn ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input readOnly value={hostedUrl} aria-label="Sign-up page link" className="font-mono text-xs" />
+              <div className="flex shrink-0 gap-2">
+                <CopyButton text={hostedUrl} />
+                <Button variant="outline" size="xs" render={<a href={hostedUrl} target="_blank" rel="noreferrer" />}>
+                  <ExternalLink />
+                  Open
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Turn on the hosted sign-up page and set a sender in the settings above to get your link.
             </p>
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {configured ? (
-              <>Create a <b>public key</b> for this list in <Link href="/developers" className="underline">Developers</Link>, then the snippet appears here.</>
-            ) : (
-              "Set a sender above first."
-            )}
-          </p>
-        )}
-      </section>
+          )}
+        </CardContent>
+      </Card>
 
-      <section>
-        <h2 className="mb-2 font-medium">4. API (for developers)</h2>
-        <pre className="overflow-x-auto rounded bg-muted/50 p-3 text-xs">{curl}</pre>
-        <p className="mt-2 text-sm">
-          List ID: <code>{list.$id}</code> <CopyButton text={list.$id} /> ·{" "}
-          <Link href="/docs/api" className="underline">Read the docs</Link>
-        </p>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>3. Embed form</CardTitle>
+          <CardDescription>Paste this HTML into your website. It works with and without JavaScript.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {snippet ? (
+            <>
+              <CodeBlock code={snippet} language="html" />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Websites that may use this form: {(pk?.allowedOrigins ?? []).join(", ") || "none"}.{" "}
+                <Link href="/developers" className={link}>
+                  Manage keys
+                </Link>
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {configured ? (
+                <>
+                  Create a <b className="font-medium text-foreground">public key</b> for this list in{" "}
+                  <Link href="/developers" className={link}>
+                    Developers
+                  </Link>
+                  . Then the form code shows here.
+                </>
+              ) : (
+                "Set a sender in the settings above first."
+              )}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>4. API</CardTitle>
+          <CardDescription>Add subscribers from your own server with a secret key.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <CodeBlock code={curl} language="bash" />
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>List ID:</span>
+            <code className="font-mono text-foreground">{list.$id}</code>
+            <CopyButton text={list.$id} />
+            <span aria-hidden>·</span>
+            <Link href="/docs/api" className={link}>
+              Read the API docs
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

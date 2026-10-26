@@ -17,12 +17,13 @@ export async function getContactForUnsubscribe(contactId: string): Promise<Conta
   }
 }
 
-// Only "active" contacts change. Bounced and complained stay as they are.
+// Active and archived contacts change. Bounced and complained stay as they are.
+// Archived counts too: otherwise "unarchive" would make a person active again after they unsubscribed.
 export async function unsubscribeContact(contactId: string, messageId?: string) {
   const contact = await getContactForUnsubscribe(contactId);
   if (!contact) return false;
 
-  if (contact.status === "active") {
+  if (contact.status === "active" || contact.status === "archived") {
     const { tablesDB } = createAdminClient();
     await tablesDB.updateRow({
       databaseId: DB_ID, tableId: CONTACTS_TABLE, rowId: contactId, data: { status: "unsubscribed" },

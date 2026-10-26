@@ -1,49 +1,159 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
+import Link from "next/link";
 import Papa from "papaparse";
+import { toast } from "sonner";
+import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { isValidEmail, normalizeEmail, MAX_IMPORT_ROWS, MAX_CHUNK } from "@/lib/contact-rules";
+import { formatNumber, plural } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { importChunk } from "../actions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TagInput } from "@/components/tag-input";
 
 type Row = Record<string, string>;
-type Result = { added: number; skipped: number; invalid: number; duplicatesInFile: number };
+type Field = "email" | "name" | "tags";
+type Result = {
+  added: number;
+  existing: number;
+  overLimit: number;
+  invalid: number;
+  duplicatesInFile: number;
+  stopped?: string;
+};
+
+const NONE = "__none";
+const SAMPLE_CSV =
+  "email,name,tags\r\njane@example.com,Jane Doe,\"vip, newsletter\"\r\njohn@example.com,John Smith,newsletter\r\n";
+const SAMPLE_HREF = `data:text/csv;charset=utf-8,${encodeURIComponent(SAMPLE_CSV)}`;
+
+const label = "text-xs font-medium text-foreground";
+const hint = "text-[11px] text-muted-foreground";
+
+function ColumnSelect({
+  title,
+  value,
+  headers,
+  optional,
+  onChange,
+}: {
+  title: string;
+  value: string;
+  headers: string[];
+  optional?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const items = [
+    { value: NONE, label: optional ? "Do not import" : "Choose a column" },
+    ...headers.map((h) => ({ value: h, label: h })),
+  ];
+  return (
+    <div className="space-y-1.5">
+      <span className={label}>
+        {title} {!optional && <span className="text-destructive">*</span>}
+      </span>
+      <Select items={items} value={value || NONE} onValueChange={(v) => onChange(!v || v === NONE ? "" : String(v))}>
+        <SelectTrigger className="w-full text-xs" aria-label={`${title} column`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((i) => (
+            <SelectItem key={i.value} value={i.value} className="text-xs">
+              {i.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function Stat({ title, value, tone }: { title: string; value: number; tone?: "good" | "bad" }) {
+  return (
+    <div className="rounded-lg border border-border p-2.5">
+      <div className={hint}>{title}</div>
+      <div
+        className={cn(
+          "mt-0.5 text-base font-semibold tabular-nums",
+          tone === "good" && "text-emerald-600 dark:text-emerald-400",
+          tone === "bad" && value > 0 && "text-destructive"
+        )}
+      >
+        {formatNumber(value)}
+      </div>
+    </div>
+  );
+}
 
 export function ImportWizard({ lists }: { lists: { id: string; name: string }[] }) {
+  const [file, setFile] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
-  const [map, setMap] = useState({ email: "", name: "", tags: "" });
+  const [map, setMap] = useState<Record<Field, string>>({ email: "", name: "", tags: "" });
   const [listIds, setListIds] = useState<string[]>([]);
-  const [tags, setTags] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [formKey, setFormKey] = useState(0);
 
-  function onFile(file: File) {
+  // Leaving the page stops the import half way, so ask first.
+  useEffect(() => {
+    if (!busy) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [busy]);
+
+  function reset() {
+    setFile(null);
+    setRows([]);
+    setHeaders([]);
+    setMap({ email: "", name: "", tags: "" });
+    setListIds([]);
+    setTags([]);
+    setConsent(false);
+    setError("");
+    setProgress(0);
+    setResult(null);
+    setFormKey((k) => k + 1);
+  }
+
+  function onFile(f: File | undefined) {
+    if (!f) return;
     setError("");
     setResult(null);
-    Papa.parse<Row>(file, {
+    if (!/\.csv$/i.test(f.name)) {
+      setError("Choose a .csv file. In Excel or Google Sheets, use File → Download → CSV.");
+      return;
+    }
+    Papa.parse<Row>(f, {
       header: true,
-      skipEmptyLines: true,
+      skipEmptyLines: "greedy",
+      transformHeader: (h) => h.trim(),
       complete: (res) => {
-        if (res.data.length > MAX_IMPORT_ROWS) {
-          setError(`Too many rows. The limit is ${MAX_IMPORT_ROWS} per file.`);
+        const hs = (res.meta.fields ?? []).filter(Boolean);
+        if (hs.length === 0 || res.data.length === 0) {
+          setError("This file has no contacts. The first row must hold the column names, like email,name,tags.");
           return;
         }
-        const hs = res.meta.fields ?? [];
+        if (res.data.length > MAX_IMPORT_ROWS) {
+          setError(
+            `This file has ${formatNumber(res.data.length)} rows. The limit is ${formatNumber(MAX_IMPORT_ROWS)} per file. Split it into smaller files.`
+          );
+          return;
+        }
         const find = (word: string) => hs.find((h) => h.toLowerCase().includes(word)) ?? "";
+        setFile(f.name);
         setHeaders(hs);
         setRows(res.data);
         setMap({ email: find("mail"), name: find("name"), tags: find("tag") });
@@ -52,22 +162,28 @@ export function ImportWizard({ lists }: { lists: { id: string; name: string }[] 
     });
   }
 
+  function onDrop(e: DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setDragging(false);
+    onFile(e.dataTransfer.files[0]);
+  }
+
   const analysis = useMemo(() => {
     const valid: { email: string; name: string; tags: string }[] = [];
+    const invalidRows: { line: number; value: string }[] = [];
     const seen = new Set<string>();
-    let invalid = 0;
     let duplicates = 0;
-    if (!map.email) return { valid, invalid, duplicates };
+    if (!map.email) return { valid, invalidRows, duplicates };
 
-    for (const r of rows) {
+    rows.forEach((r, i) => {
       const email = normalizeEmail(r[map.email] ?? "");
       if (!isValidEmail(email)) {
-        invalid++;
-        continue;
+        invalidRows.push({ line: i + 2, value: r[map.email] ?? "" }); // line 1 is the header
+        return;
       }
       if (seen.has(email)) {
         duplicates++;
-        continue;
+        return;
       }
       seen.add(email);
       valid.push({
@@ -75,215 +191,303 @@ export function ImportWizard({ lists }: { lists: { id: string; name: string }[] 
         name: map.name ? r[map.name] ?? "" : "",
         tags: map.tags ? r[map.tags] ?? "" : "",
       });
-    }
-    return { valid, invalid, duplicates };
+    });
+    return { valid, invalidRows, duplicates };
   }, [rows, map]);
 
   async function run() {
     setBusy(true);
     setError("");
     setProgress(0);
-    const total = { added: 0, skipped: 0, invalid: 0 };
+    const total = { added: 0, existing: 0, overLimit: 0, invalid: 0 };
+    let stopped: string | undefined;
 
     for (let i = 0; i < analysis.valid.length; i += MAX_CHUNK) {
-      const res = await importChunk({
-        rows: analysis.valid.slice(i, i + MAX_CHUNK),
-        listIds,
-        tags,
-        consent,
-      });
-      if (res.error) {
-        setError(res.error);
+      try {
+        const res = await importChunk({
+          rows: analysis.valid.slice(i, i + MAX_CHUNK),
+          listIds,
+          tags: tags.join(","),
+          consent,
+        });
+        if (res.error) {
+          stopped = res.error;
+          break;
+        }
+        total.added += res.added;
+        total.existing += res.existing;
+        total.overLimit += res.overLimit;
+        total.invalid += res.invalid;
+      } catch {
+        stopped =
+          "The connection failed, so the import stopped. Import the same file again: contacts that already exist are skipped.";
         break;
       }
-      total.added += res.added;
-      total.skipped += res.skipped;
-      total.invalid += res.invalid;
       setProgress(Math.min(i + MAX_CHUNK, analysis.valid.length));
     }
 
     setResult({
       ...total,
-      invalid: total.invalid + analysis.invalid,
+      invalid: total.invalid + analysis.invalidRows.length,
       duplicatesInFile: analysis.duplicates,
+      stopped,
     });
     setBusy(false);
+    if (stopped) toast.error(stopped);
+    else toast.success(`Import finished. ${plural(total.added, "contact")} added.`);
   }
 
-  const Select = ({
-    label,
-    field,
-    optional,
-  }: {
-    label: string;
-    field: "email" | "name" | "tags";
-    optional?: boolean;
-  }) => (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium text-foreground">{label}</label>
-      <select
-        value={map[field]}
-        onChange={(e) => setMap({ ...map, [field]: e.target.value })}
-        className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-      >
-        <option value="">{optional ? "(none)" : "Choose a column"}</option>
-        {headers.map((h) => (
-          <option key={h} value={h}>
-            {h}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
+  // ----- after the import -----
+  if (result) {
+    const viewHref = listIds.length === 1 ? `/contacts?list=${listIds[0]}` : "/contacts";
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {result.stopped ? (
+              <AlertTriangle className="size-4 text-destructive" />
+            ) : (
+              <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+            )}
+            {result.stopped ? "Import stopped" : "Import finished"}
+          </CardTitle>
+          <CardDescription>{file}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {result.stopped && (
+            <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive">
+              {result.stopped}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Stat title="Added" value={result.added} tone="good" />
+            <Stat title="Already in your contacts" value={result.existing} />
+            <Stat title="Invalid emails" value={result.invalid} tone="bad" />
+            <Stat title="Duplicates in the file" value={result.duplicatesInFile} />
+          </div>
+          {result.overLimit > 0 && (
+            <p className="text-xs text-destructive">
+              Not added: {plural(result.overLimit, "contact")}, because you reached your contact limit.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button render={<Link href={viewHref} />}>View contacts</Button>
+            <Button variant="outline" onClick={reset}>
+              <Upload />
+              Import another file
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const ready = analysis.valid.length;
+  const percent = ready > 0 ? Math.round((progress / ready) * 100) : 0;
 
   return (
-    <div className="space-y-5 text-xs">
-      <div className="space-y-1.5">
-        <Input
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-          className="h-9 cursor-pointer file:cursor-pointer"
-        />
-        <p className="text-[11px] text-muted-foreground">
-          Upload a CSV with a header row. Up to {MAX_IMPORT_ROWS} contacts per upload.
-        </p>
-      </div>
-
-      {error && (
-        <p className="rounded-md border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive">
-          {error}
-        </p>
-      )}
-
-      {rows.length > 0 && (
-        <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Select label="Email column (Required)" field="email" />
-            <Select label="Name column" field="name" optional />
-            <Select label="Tags column" field="tags" optional />
-          </div>
-
-          <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-1">
-            <p className="font-medium text-foreground">File Summary:</p>
-            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-              <div>
-                Total rows: <span className="font-mono font-semibold">{rows.length}</span>
+    <div key={formKey} className="space-y-6">
+      {/* ----- step 1: file ----- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>1. Choose a CSV file</CardTitle>
+          <CardDescription>
+            The first row must hold the column names. Up to {formatNumber(MAX_IMPORT_ROWS)} contacts per file.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {file ? (
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+              <FileSpreadsheet className="size-5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{file}</p>
+                <p className={hint}>{plural(rows.length, "row")}</p>
               </div>
-              <div>
-                Valid contacts: <span className="font-mono font-semibold">{analysis.valid.length}</span>
-              </div>
-              <div>
-                Invalid emails: <span className="font-mono font-semibold">{analysis.invalid}</span>
-              </div>
-              <div>
-                Duplicates: <span className="font-mono font-semibold">{analysis.duplicates}</span>
-              </div>
+              <Button variant="ghost" size="sm" onClick={reset} disabled={busy}>
+                <X />
+                Remove
+              </Button>
             </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Tags</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {analysis.valid.slice(0, 5).map((r) => (
-                  <TableRow key={r.email}>
-                    <TableCell className="font-medium text-xs">{r.email}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.name || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.tags || "—"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {lists.length > 0 && (
-            <fieldset className="space-y-2">
-              <legend className="text-xs font-medium text-foreground">
-                Add contacts to these lists:
-              </legend>
-              <div className="flex flex-wrap gap-4">
-                {lists.map((l) => (
-                  <label key={l.id} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={listIds.includes(l.id)}
-                      onChange={(e) =>
-                        setListIds(
-                          e.target.checked
-                            ? [...listIds, l.id]
-                            : listIds.filter((x) => x !== l.id)
-                        )
-                      }
-                      className="rounded border-input text-primary focus:ring-ring"
-                    />
-                    <span>{l.name}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+          ) : (
+            <label
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              className={cn(
+                "flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-border px-4 py-10 text-center transition-colors hover:bg-muted/40 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
+                dragging && "border-primary bg-muted/60"
+              )}
+            >
+              <Upload className="size-6 text-muted-foreground" />
+              <span className="text-sm font-medium">Drop your CSV file here, or click to choose it</span>
+              <span className={hint}>Columns like email, name, and tags are found by themselves.</span>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                onChange={(e) => onFile(e.target.files?.[0])}
+              />
+            </label>
           )}
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground">
-              Add tags to everyone (comma separated):
-            </label>
-            <Input
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="e.g. newsletter, imported-2026"
-            />
-          </div>
+          {error && (
+            <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive">
+              {error}
+            </p>
+          )}
 
-          <label className="flex items-start gap-2 cursor-pointer rounded-md border border-border bg-muted/30 p-2.5">
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-              className="mt-0.5 rounded border-input text-primary focus:ring-ring"
-            />
-            <span className="text-xs text-foreground">
-              I confirm that all contacts explicitly consented to receive emails from this organization. I did not purchase or scrape these email addresses.
-            </span>
-          </label>
+          {!file && (
+            <a href={SAMPLE_HREF} download="mailflow-contacts-sample.csv" className={buttonVariants({ variant: "link", size: "xs" })}>
+              <Download />
+              Download a sample CSV file
+            </a>
+          )}
+        </CardContent>
+      </Card>
 
-          <Button
-            onClick={run}
-            disabled={!consent || analysis.valid.length === 0 || busy}
-            className="w-full"
-          >
-            {busy
-              ? `Importing ${progress} of ${analysis.valid.length}...`
-              : `Import ${analysis.valid.length} Contacts`}
-          </Button>
+      {file && (
+        <>
+          {/* ----- step 2: columns ----- */}
+          <Card>
+            <CardHeader>
+              <CardTitle>2. Match the columns</CardTitle>
+              <CardDescription>Tell Mailflow which column holds which information.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <ColumnSelect title="Email" value={map.email} headers={headers} onChange={(email) => setMap({ ...map, email })} />
+                <ColumnSelect title="Name" value={map.name} headers={headers} optional onChange={(name) => setMap({ ...map, name })} />
+                <ColumnSelect title="Tags" value={map.tags} headers={headers} optional onChange={(t) => setMap({ ...map, tags: t })} />
+              </div>
+
+              {map.email ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <Stat title="Rows in the file" value={rows.length} />
+                    <Stat title="Ready to import" value={ready} tone="good" />
+                    <Stat title="Invalid emails" value={analysis.invalidRows.length} tone="bad" />
+                    <Stat title="Duplicates in the file" value={analysis.duplicates} />
+                  </div>
+
+                  {analysis.invalidRows.length > 0 && (
+                    <details className="rounded-lg border border-border p-3 text-xs">
+                      <summary className="cursor-pointer font-medium">
+                        Show the rows with an invalid email ({formatNumber(analysis.invalidRows.length)})
+                      </summary>
+                      <ul className="mt-2 space-y-1 font-mono text-[11px] text-muted-foreground">
+                        {analysis.invalidRows.slice(0, 20).map((r) => (
+                          <li key={r.line}>
+                            Row {r.line}: {r.value ? `"${r.value}"` : "(empty)"}
+                          </li>
+                        ))}
+                      </ul>
+                      {analysis.invalidRows.length > 20 && (
+                        <p className={`mt-1 ${hint}`}>And {formatNumber(analysis.invalidRows.length - 20)} more.</p>
+                      )}
+                      <p className={`mt-2 ${hint}`}>These rows are skipped. Fix them in your file and import it again.</p>
+                    </details>
+                  )}
+
+                  {ready > 0 && (
+                    <div className="overflow-hidden rounded-lg border border-border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="text-xs">Email</TableHead>
+                            <TableHead className="text-xs">Name</TableHead>
+                            <TableHead className="text-xs">Tags</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {analysis.valid.slice(0, 5).map((r) => (
+                            <TableRow key={r.email}>
+                              <TableCell className="text-xs font-medium">{r.email}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{r.name || "—"}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{r.tags || "—"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      <p className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+                        Preview: the first {Math.min(5, ready)} of {plural(ready, "contact")}.
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-destructive">Choose the column that holds the email addresses.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ----- step 3: options and import ----- */}
+          <Card>
+            <CardHeader>
+              <CardTitle>3. Lists, tags, and permission</CardTitle>
+              <CardDescription>These apply to every contact in the file.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <fieldset className="space-y-2">
+                <legend className={label}>Add to lists</legend>
+                {lists.length === 0 ? (
+                  <p className={hint}>
+                    You have no lists yet.{" "}
+                    <Link href="/contacts/lists" className="underline underline-offset-2 hover:text-foreground">
+                      Create a list
+                    </Link>{" "}
+                    first if you want to group these contacts.
+                  </p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {lists.map((l) => (
+                      <label key={l.id} className="flex cursor-pointer items-center gap-2 text-xs">
+                        <Checkbox
+                          checked={listIds.includes(l.id)}
+                          onCheckedChange={(checked) =>
+                            setListIds(checked ? [...listIds, l.id] : listIds.filter((x) => x !== l.id))
+                          }
+                        />
+                        <span className="truncate">{l.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </fieldset>
+
+              <div className="space-y-1.5">
+                <label htmlFor="import-tags" className={label}>
+                  Add tags to everyone
+                </label>
+                <TagInput id="import-tags" onChange={setTags} placeholder="newsletter, imported-2026" />
+              </div>
+
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border bg-muted/30 p-3">
+                <Checkbox checked={consent} onCheckedChange={(c) => setConsent(Boolean(c))} className="mt-0.5" />
+                <span className="text-xs text-foreground">
+                  All these people agreed to get emails from my organization. I did not buy or scrape these email addresses.
+                </span>
+              </label>
+
+              {busy && (
+                <div className="space-y-1.5">
+                  <Progress value={percent} aria-label="Import progress" />
+                  <p className={`${hint} tabular-nums`}>
+                    {formatNumber(progress)} of {plural(ready, "contact")} imported. Keep this page open.
+                  </p>
+                </div>
+              )}
+
+              <Button onClick={run} disabled={!consent || ready === 0 || busy} className="w-full sm:w-auto">
+                {busy ? <Loader2 className="animate-spin" /> : <Upload />}
+                {busy ? "Importing..." : `Import ${plural(ready, "contact")}`}
+              </Button>
+              {!consent && ready > 0 && <p className={hint}>Confirm the permission above to start the import.</p>}
+            </CardContent>
+          </Card>
         </>
-      )}
-
-      {result && (
-        <div className="rounded-lg border border-border bg-muted/60 p-4 space-y-1">
-          <p className="font-semibold text-foreground">Import Finished</p>
-          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 pt-1">
-            <div>
-              Added: <span className="font-mono font-semibold">{result.added}</span>
-            </div>
-            <div>
-              Skipped: <span className="font-mono font-semibold">{result.skipped}</span>
-            </div>
-            <div>
-              Invalid: <span className="font-mono font-semibold">{result.invalid}</span>
-            </div>
-            <div>
-              Duplicates:{" "}
-              <span className="font-mono font-semibold">{result.duplicatesInFile}</span>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
