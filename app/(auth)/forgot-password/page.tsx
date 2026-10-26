@@ -1,32 +1,22 @@
 import Link from "next/link";
-import { AuthForm } from "@/components/auth-form";
-import { forgotPassword } from "../actions";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { ArrowLeft } from "lucide-react";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { ForgotPasswordForm } from "../auth-forms";
 
 export default function ForgotPasswordPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Reset Password</CardTitle>
-        <CardDescription>Enter your email to receive account recovery instructions</CardDescription>
+        <CardTitle>Reset your password</CardTitle>
+        <CardDescription>Enter the email of your account. We send you a link to choose a new password.</CardDescription>
       </CardHeader>
       <CardContent>
-        <AuthForm
-          action={forgotPassword}
-          submitLabel="Send Reset Link"
-          fields={[{ name: "email", label: "Email Address", type: "email", placeholder: "you@example.com" }]}
-        />
+        <ForgotPasswordForm />
       </CardContent>
-      <CardFooter className="flex justify-center text-xs text-muted-foreground">
-        <Link href="/login" className="hover:underline">
-          Return to log in
+      <CardFooter className="justify-center text-xs">
+        <Link href="/login" className="flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline">
+          <ArrowLeft className="size-3" />
+          Back to log in
         </Link>
       </CardFooter>
     </Card>
