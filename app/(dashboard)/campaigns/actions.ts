@@ -30,6 +30,11 @@ function revalidateCampaigns() {
 
 const notFound: ActionResult = { ok: false, message: "Campaign not found." };
 
+// A column that scripts/setup-tables.ts defines, but the database does not have yet.
+// Tell the user how to fix it, instead of crashing the page.
+const SETUP_NEEDED = 'The database is missing new campaign fields. Run "npm run db:setup", then try again.';
+const missingColumn = (e: unknown) => /Unknown attribute/i.test((e as { message?: string })?.message ?? "");
+
 // ---------- Create and edit drafts ----------
 async function readCampaignForm(accountId: string, formData: FormData) {
   const text = (name: string) => String(formData.get(name) ?? "");
@@ -78,17 +83,22 @@ export async function saveCampaign(_: CampaignFormState, formData: FormData): Pr
 
   const { tablesDB } = createAdminClient();
   let rowId = existing?.$id;
-  if (existing) {
-    await tablesDB.updateRow({ databaseId: DB_ID, tableId: CAMPAIGNS_TABLE, rowId: existing.$id, data: form.data });
-  } else {
-    const row = await tablesDB.createRow({
-      databaseId: DB_ID,
-      tableId: CAMPAIGNS_TABLE,
-      rowId: ID.unique(),
-      data: { accountId: user.$id, status: "draft", ...form.data },
-      permissions: [Permission.read(Role.user(user.$id))],
-    });
-    rowId = row.$id;
+  try {
+    if (existing) {
+      await tablesDB.updateRow({ databaseId: DB_ID, tableId: CAMPAIGNS_TABLE, rowId: existing.$id, data: form.data });
+    } else {
+      const row = await tablesDB.createRow({
+        databaseId: DB_ID,
+        tableId: CAMPAIGNS_TABLE,
+        rowId: ID.unique(),
+        data: { accountId: user.$id, status: "draft", ...form.data },
+        permissions: [Permission.read(Role.user(user.$id))],
+      });
+      rowId = row.$id;
+    }
+  } catch (e) {
+    if (missingColumn(e)) return { error: SETUP_NEEDED };
+    throw e;
   }
 
   revalidateCampaigns();
@@ -154,7 +164,12 @@ export async function scheduleCampaign(formData: FormData): Promise<ActionResult
   const c = ready.campaign;
   const scheduledAt = new Date(at).toISOString();
 
-  await updateCampaign(c.$id, { status: "scheduled", scheduledAt });
+  try {
+    await updateCampaign(c.$id, { status: "scheduled", scheduledAt });
+  } catch (e) {
+    if (missingColumn(e)) return { ok: false, message: SETUP_NEEDED };
+    throw e;
+  }
   try {
     await getQueues().prepare.add(
       "prepare",
@@ -256,27 +271,34 @@ export async function duplicateCampaign(formData: FormData): Promise<ActionResul
   if (!c) return notFound;
 
   const { tablesDB } = createAdminClient();
-  const row = await tablesDB.createRow({
-    databaseId: DB_ID,
-    tableId: CAMPAIGNS_TABLE,
-    rowId: ID.unique(),
-    data: {
-      accountId: user.$id,
-      status: "draft",
-      name: `${c.name} (copy)`.slice(0, 150),
-      subject: c.subject,
-      previewText: c.previewText ?? "",
-      fromName: c.fromName ?? "",
-      fromEmail: c.fromEmail,
-      replyTo: c.replyTo ?? "",
-      html: c.html,
-      listIds: c.listIds ?? [],
-    },
-    permissions: [Permission.read(Role.user(user.$id))],
-  });
+  let rowId: string;
+  try {
+    const row = await tablesDB.createRow({
+      databaseId: DB_ID,
+      tableId: CAMPAIGNS_TABLE,
+      rowId: ID.unique(),
+      data: {
+        accountId: user.$id,
+        status: "draft",
+        name: `${c.name} (copy)`.slice(0, 150),
+        subject: c.subject,
+        previewText: c.previewText ?? "",
+        fromName: c.fromName ?? "",
+        fromEmail: c.fromEmail,
+        replyTo: c.replyTo ?? "",
+        html: c.html,
+        listIds: c.listIds ?? [],
+      },
+      permissions: [Permission.read(Role.user(user.$id))],
+    });
+    rowId = row.$id;
+  } catch (e) {
+    if (missingColumn(e)) return { ok: false, message: SETUP_NEEDED };
+    throw e;
+  }
 
   revalidateCampaigns();
-  return { ok: true, message: "Campaign duplicated. It is a new draft.", id: row.$id };
+  return { ok: true, message: "Campaign duplicated. It is a new draft.", id: rowId };
 }
 
 export async function deleteCampaign(formData: FormData): Promise<ActionResult> {
