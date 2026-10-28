@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import { AlertCircle, CheckCircle2, Eye, Info, Trash2 } from "lucide-react";
+import { AlertCircle, BookmarkPlus, CheckCircle2, Eye, Info, LayoutTemplate, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,10 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmailPreview } from "@/components/campaigns/email-preview";
-import { CAMPAIGN_TEMPLATES } from "@/lib/campaign-templates";
+import { useConfirm } from "@/components/confirm-dialog";
+import { SaveTemplateDialog } from "@/components/templates/save-template-dialog";
+import { TemplatePicker, type PickedTemplate } from "@/components/templates/template-picker";
+import { renderDesign } from "@/lib/email-design";
 import { MAX_WAIT_DAYS, type FlowIssue, type FlowNode } from "@/lib/automation-flow";
 import type { NodeStats } from "@/lib/automations";
 import { formatNumber } from "@/lib/format";
@@ -93,7 +96,30 @@ export function StepInspector({
 }) {
   const look = STEP_LOOK[step.type];
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [confirmDialog, confirm] = useConfirm();
   const htmlRef = useRef<HTMLTextAreaElement>(null);
+
+  // An automation email is HTML: a design from the visual editor becomes its HTML here.
+  function applyTemplate(t: PickedTemplate) {
+    if (step.type !== "email") return;
+    const d = step.data;
+    const apply = () =>
+      onChange({
+        ...d,
+        html: t.design ? renderDesign(t.design) : t.html,
+        subject: d.subject.trim() ? d.subject : t.subject,
+        previewText: d.previewText.trim() ? d.previewText : t.previewText,
+      });
+    if (!d.html.trim()) return apply();
+    confirm({
+      title: "Replace the content of this email?",
+      description: "The template replaces the HTML of this step. You cannot undo this.",
+      confirmLabel: "Replace content",
+      onConfirm: apply,
+    });
+  }
 
   function insertTag(tag: string) {
     if (step.type !== "email") return;
@@ -153,7 +179,6 @@ export function StepInspector({
     }
     case "email": {
       const d = step.data;
-      const templates = CAMPAIGN_TEMPLATES.map((t) => ({ value: t.id, label: t.name }));
       form = (
         <>
           <Field id="email-subject" title="Subject line">
@@ -165,19 +190,10 @@ export function StepInspector({
           <Field id="email-html" title="Content (HTML)">
             {!readOnly && (
               <div className="flex flex-wrap items-center gap-1.5">
-                <Select items={templates} value={null} onValueChange={(v) => {
-                  const t = CAMPAIGN_TEMPLATES.find((x) => x.id === v);
-                  if (t) onChange({ ...d, html: t.html });
-                }}>
-                  <SelectTrigger size="sm" className="w-36 text-xs" aria-label="Use a template">
-                    <SelectValue placeholder="Use a template" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates.map((t) => (
-                      <SelectItem key={t.value} value={t.value} className="text-xs">{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Button type="button" variant="outline" size="xs" onClick={() => setPickerOpen(true)}>
+                  <LayoutTemplate />
+                  Choose a template
+                </Button>
                 <Button type="button" variant="outline" size="xs" onClick={() => insertTag("{{name}}")}>Name</Button>
                 <Button type="button" variant="outline" size="xs" onClick={() => insertTag("{{email}}")}>Email</Button>
               </div>
@@ -193,10 +209,24 @@ export function StepInspector({
               onChange={(e) => onChange({ ...d, html: e.target.value })}
             />
           </Field>
-          <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
-            <Eye />
-            Preview
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
+              <Eye />
+              Preview
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setSaveOpen(true)} disabled={!d.html.trim()}>
+              <BookmarkPlus />
+              Save as template
+            </Button>
+          </div>
+          <TemplatePicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={applyTemplate} />
+          <SaveTemplateDialog
+            open={saveOpen}
+            onOpenChange={setSaveOpen}
+            defaultName={d.subject.trim() || "Automation email"}
+            content={() => ({ design: null, html: d.html })}
+          />
+          {confirmDialog}
           <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
             <DialogContent className="sm:max-w-3xl">
               <DialogHeader>

@@ -47,6 +47,7 @@ export const placeholders = {
     configuration: "Configuration",
     dashboard: "Dashboard",
     campaigns: "Campaigns",
+    templates: "Templates",
     automations: "Automations",
     contacts: "Contacts",
     lists: "Lists",

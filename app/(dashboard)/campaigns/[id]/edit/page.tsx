@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { getOwnedCampaign } from "@/lib/campaigns";
 import { canEditCampaign } from "@/lib/campaign-status";
+import { parseDesignJson } from "@/lib/email-design";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CampaignEditor } from "../../campaign-editor";
@@ -58,6 +59,7 @@ async function EditContent({ params }: { params: Promise<{ id: string }> }) {
           fromEmail: c.fromEmail,
           replyTo: c.replyTo ?? "",
           html: c.html,
+          design: parseDesignJson(c.design),
           listIds: c.listIds ?? [],
         }}
         {...data}

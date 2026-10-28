@@ -1,22 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowRight, CheckCircle2, FileCode2, Info, LayoutTemplate, Loader2 } from "lucide-react";
+import {
+  AlertTriangle, ArrowRight, BookmarkPlus, Blocks, CheckCircle2, Code, FileCode2, Info, LayoutTemplate, Loader2, MoreHorizontal,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { EmailPreview } from "@/components/campaigns/email-preview";
 import { useConfirm } from "@/components/confirm-dialog";
+import { BlockEditor, type DesignChange } from "@/components/templates/block-editor";
+import { SaveTemplateDialog } from "@/components/templates/save-template-dialog";
+import { TemplatePicker, type PickedTemplate } from "@/components/templates/template-picker";
+import { useDesignHistory } from "@/components/templates/use-design-history";
 import { useActionForm } from "@/hooks/use-action-form";
-import { CAMPAIGN_TEMPLATES } from "@/lib/campaign-templates";
+import { blankDesign, renderDesign, type EmailDesign } from "@/lib/email-design";
 import { formatNumber, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { saveCampaign, type CampaignFormState } from "./actions";
@@ -30,12 +36,38 @@ export type EditorCampaign = {
   fromEmail: string;
   replyTo: string;
   html: string;
+  design: EmailDesign | null; // set: the content is made in the visual editor
   listIds: string[];
 };
 
 const label = "text-xs font-medium text-foreground";
 const hint = "text-[11px] text-muted-foreground";
 const BLANK_HTML = "<p>Hi {{name}},</p>\n<p></p>";
+
+function StartOption({ icon: Icon, title, text, onClick, primary }: {
+  icon: typeof Blocks;
+  title: string;
+  text: string;
+  onClick: () => void;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-start gap-2 rounded-lg border p-3 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        primary ? "border-primary/50 hover:border-primary" : "border-border hover:border-foreground/30"
+      )}
+    >
+      <span className={cn("flex size-8 items-center justify-center rounded-md", primary ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")}>
+        <Icon className="size-4" />
+      </span>
+      <span className="text-xs font-medium">{title}</span>
+      <span className={hint}>{text}</span>
+    </button>
+  );
+}
 
 function Section({ id, title, description, children }: { id: string; title: string; description: string; children: ReactNode }) {
   return (
@@ -83,13 +115,21 @@ export function CampaignEditor({
   const router = useRouter();
   const [confirmDialog, confirm] = useConfirm();
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
 
   // Fields the preview and the hints need are controlled. The rest are plain form fields.
   const [subject, setSubject] = useState(campaign.subject);
   const [previewText, setPreviewText] = useState(campaign.previewText);
   const [fromName, setFromName] = useState(campaign.fromName);
   const [fromEmail, setFromEmail] = useState(campaign.fromEmail);
-  const [html, setHtml] = useState(campaign.html);
+  // The content: a block design (visual editor), or HTML. "null" = not chosen yet (a new campaign).
+  const history = useDesignHistory(campaign.design);
+  const design = history.design;
+  const [html, setHtml] = useState(campaign.design ? "" : campaign.html);
+  const [mode, setMode] = useState<"design" | "html" | null>(campaign.design ? "design" : campaign.html.trim() ? "html" : null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [saveName, setSaveName] = useState<string | null>(null); // set = the "Save as template" window is open
   const [audience, setAudience] = useState(campaign.id && campaign.listIds.length > 0 ? "lists" : "all");
   const [chosen, setChosen] = useState<string[]>(campaign.listIds);
   const [dirty, setDirty] = useState(false);
@@ -117,17 +157,69 @@ export function CampaignEditor({
     return res;
   }, undefined);
 
-  function applyTemplate(templateHtml: string) {
-    const apply = () => {
-      setHtml(templateHtml);
+  // The HTML that is sent, and the HTML of the preview (with click-to-select in the visual editor).
+  const sendHtml = useMemo(() => (mode === "design" && design ? renderDesign(design) : html), [mode, design, html]);
+  const previewHtml = useMemo(() => (mode === "design" && design ? renderDesign(design, { preview: true, selectable: true }) : html), [mode, design, html]);
+
+  const changeDesign: DesignChange = (next, key) => {
+    history.change(next, key);
+    setDirty(true);
+  };
+  const editorHistory = {
+    ...history,
+    undo: () => {
+      history.undo();
       setDirty(true);
+    },
+    redo: () => {
+      history.redo();
+      setDirty(true);
+    },
+  };
+
+  function startWith(next: { design: EmailDesign | null; html: string }) {
+    if (next.design) {
+      // Already in the visual editor: Undo can bring back the old content.
+      if (mode === "design") history.change(next.design);
+      else history.reset(next.design);
+      setMode("design");
+    } else {
+      history.reset(null);
+      setHtml(next.html);
+      setMode("html");
+    }
+    setSelected(null);
+    setDirty(true);
+  }
+
+  function applyTemplate(t: PickedTemplate) {
+    const apply = () => {
+      startWith(t);
+      // Fill the subject and the preview text only when they are empty: never replace what the person wrote.
+      if (!subject.trim() && t.subject) setSubject(t.subject);
+      if (!previewText.trim() && t.previewText) setPreviewText(t.previewText);
     };
-    if (!html.trim()) return apply();
+    const hasContent = mode === "design" ? (design?.blocks.length ?? 0) > 0 : mode === "html" && html.trim() !== "" && html !== BLANK_HTML;
+    if (!hasContent) return apply();
     confirm({
       title: "Replace the current content?",
-      description: "The template replaces everything in the content field. You cannot undo this.",
+      description:
+        mode === "design" && t.design
+          ? "The template replaces the content of this email. You can use Undo to get it back."
+          : "The template replaces the content of this email. You cannot undo this.",
       confirmLabel: "Replace content",
       onConfirm: apply,
+    });
+  }
+
+  function editAsHtml() {
+    if (!design) return;
+    confirm({
+      title: "Edit this email as HTML?",
+      description:
+        "You can then change the HTML code by hand, but you cannot go back to the visual editor for this email. To keep a visual copy, save it as a template first.",
+      confirmLabel: "Edit as HTML",
+      onConfirm: () => startWith({ design: null, html: renderDesign(design) }),
     });
   }
 
@@ -167,7 +259,6 @@ export function CampaignEditor({
   }
 
   const listReach = lists.filter((l) => chosen.includes(l.id)).reduce((n, l) => n + l.active, 0);
-  const templateItems = CAMPAIGN_TEMPLATES.map((t) => ({ value: t.id, label: t.name }));
 
   return (
     <form onSubmit={onSubmit} onChange={() => setDirty(true)} className="grid gap-6 xl:grid-cols-2">
@@ -175,7 +266,7 @@ export function CampaignEditor({
 
       <div className="min-w-0 space-y-6">
         <Section id="details" title="Campaign name" description="Only you see this name. Subscribers see the subject.">
-          <Input name="name" defaultValue={campaign.name} required maxLength={150} placeholder="October newsletter" aria-label="Campaign name" />
+          <Input ref={nameRef} name="name" defaultValue={campaign.name} required maxLength={150} placeholder="October newsletter" aria-label="Campaign name" />
         </Section>
 
         <Section id="audience" title="To" description="Only active contacts get campaigns.">
@@ -294,10 +385,10 @@ export function CampaignEditor({
 
         <Section id="subject" title="Subject" description="The first thing people see in their inbox.">
           <div className="space-y-1.5">
-            <label htmlFor="subject" className={label}>
+            <label htmlFor="subjectLine" className={label}>
               Subject line <span className="text-destructive">*</span>
             </label>
-            <Input id="subject" name="subject" required maxLength={200} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Our biggest update this year" />
+            <Input id="subjectLine" name="subject" required maxLength={200} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Our biggest update this year" />
             <p className={cn(hint, subject.length > 60 && "text-amber-700 dark:text-amber-400")}>
               {subject.length} characters. Subjects under 60 characters show in full on most phones.
             </p>
@@ -318,84 +409,121 @@ export function CampaignEditor({
           </div>
         </Section>
 
-        <Section id="content" title="Content" description="The body of the email, in HTML.">
-          {!html.trim() ? (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {CAMPAIGN_TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => applyTemplate(t.html)}
-                  className="flex flex-col items-start gap-1 rounded-lg border border-border p-3 text-left transition-colors hover:border-foreground/30 hover:bg-muted/40"
-                >
-                  <span className="flex items-center gap-1.5 text-xs font-medium">
-                    <LayoutTemplate className="size-3.5" />
-                    {t.name}
-                  </span>
-                  <span className={hint}>{t.description}</span>
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => applyTemplate(BLANK_HTML)}
-                className="flex flex-col items-start gap-1 rounded-lg border border-dashed border-border p-3 text-left transition-colors hover:border-foreground/30 hover:bg-muted/40"
-              >
-                <span className="flex items-center gap-1.5 text-xs font-medium">
-                  <FileCode2 className="size-3.5" />
-                  Start from scratch
-                </span>
-                <span className={hint}>Write or paste your own HTML.</span>
-              </button>
+        <Section
+          id="content"
+          title="Content"
+          description={
+            mode === "design"
+              ? "Build the email from blocks. Click a block in the preview to change it."
+              : mode === "html"
+                ? "The body of the email, in HTML."
+                : "Choose how you want to make this email."
+          }
+        >
+          {mode === null ? (
+            <div className="grid gap-2 sm:grid-cols-3">
+              <StartOption icon={LayoutTemplate} title="Choose a template" text="Start from a ready design in the gallery." onClick={() => setPickerOpen(true)} primary />
+              <StartOption icon={Blocks} title="Design with blocks" text="Start empty. Add text, pictures, and buttons. No code." onClick={() => startWith({ design: blankDesign(), html: "" })} />
+              <StartOption icon={FileCode2} title="Write HTML" text="Paste or write your own HTML code." onClick={() => startWith({ design: null, html: BLANK_HTML })} />
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Select items={templateItems} value={null} onValueChange={(v) => {
-                const t = CAMPAIGN_TEMPLATES.find((x) => x.id === v);
-                if (t) applyTemplate(t.html);
-              }}>
-                <SelectTrigger size="sm" className="w-44 text-xs" aria-label="Use a template">
-                  <SelectValue placeholder="Use a template" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templateItems.map((t) => (
-                    <SelectItem key={t.value} value={t.value} className="text-xs">
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span className={`ml-auto ${hint}`}>Insert:</span>
-              <Button type="button" variant="outline" size="xs" onClick={() => insertTag("{{name}}")}>
-                Name
-              </Button>
-              <Button type="button" variant="outline" size="xs" onClick={() => insertTag("{{email}}")}>
-                Email
-              </Button>
+              <Badge variant="secondary" className="font-normal">
+                {mode === "design" ? <Blocks /> : <Code />}
+                {mode === "design" ? "Visual editor" : "HTML"}
+              </Badge>
+              <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                {mode === "html" && (
+                  <>
+                    <span className={hint}>Insert:</span>
+                    <Button type="button" variant="outline" size="xs" onClick={() => insertTag("{{name}}")}>
+                      Name
+                    </Button>
+                    <Button type="button" variant="outline" size="xs" onClick={() => insertTag("{{email}}")}>
+                      Email
+                    </Button>
+                  </>
+                )}
+                <Button type="button" variant="outline" size="xs" onClick={() => setPickerOpen(true)}>
+                  <LayoutTemplate />
+                  Change template
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  disabled={!sendHtml.trim()}
+                  onClick={() => setSaveName(nameRef.current?.value.trim() || subject.trim() || "My template")}
+                >
+                  <BookmarkPlus />
+                  Save as template
+                </Button>
+                {mode === "design" && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-xs" aria-label="More content actions" />}>
+                      <MoreHorizontal />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem onClick={editAsHtml}>
+                        <Code />
+                        Edit as HTML
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </div>
           )}
 
-          <Textarea
-            ref={contentRef}
-            name="html"
-            required
-            value={html}
-            onChange={(e) => setHtml(e.target.value)}
-            rows={html.trim() ? 18 : 4}
-            maxLength={60000}
-            spellCheck={false}
-            placeholder="<p>Hi {{name}},</p>"
-            className="font-mono text-xs leading-relaxed"
-            aria-label="Email content (HTML)"
-          />
-          <p className={hint}>
-            {formatNumber(html.length)} of 60,000 characters. {"{{name}}"} becomes the contact&apos;s name (or
-            &ldquo;friend&rdquo;). Mailflow adds the unsubscribe link and tracks opens and clicks.
-          </p>
+          {mode === "design" && design && (
+            // Enter in a block field must not submit the campaign form.
+            <div onKeyDown={(e) => e.key === "Enter" && e.target instanceof HTMLInputElement && e.preventDefault()}>
+              <BlockEditor design={design} onChange={changeDesign} selected={selected} onSelect={setSelected} history={editorHistory} />
+              <input type="hidden" name="design" value={JSON.stringify(design)} />
+              <input type="hidden" name="html" value={sendHtml} />
+            </div>
+          )}
+
+          {mode === "html" && (
+            <>
+              <Textarea
+                ref={contentRef}
+                name="html"
+                required
+                value={html}
+                onChange={(e) => setHtml(e.target.value)}
+                rows={18}
+                maxLength={60000}
+                spellCheck={false}
+                placeholder="<p>Hi {{name}},</p>"
+                className="font-mono text-xs leading-relaxed"
+                aria-label="Email content (HTML)"
+              />
+              <p className={hint}>
+                {formatNumber(html.length)} of 60,000 characters. {"{{name}}"} becomes the contact&apos;s name (or
+                &ldquo;friend&rdquo;). Mailflow adds the unsubscribe link and tracks opens and clicks.
+              </p>
+            </>
+          )}
+          {mode === "design" && (
+            <p className={hint}>
+              {"{{name}}"} becomes the contact&apos;s name (or &ldquo;friend&rdquo;). Mailflow adds the unsubscribe link and
+              tracks opens and clicks.
+            </p>
+          )}
         </Section>
       </div>
 
       <div className="min-w-0 xl:sticky xl:top-20 xl:self-start">
-        <EmailPreview html={html} subject={subject} previewText={previewText} fromName={fromName} fromEmail={fromEmail} />
+        <EmailPreview
+          html={previewHtml}
+          subject={subject}
+          previewText={previewText}
+          fromName={fromName}
+          fromEmail={fromEmail}
+          selectedBlock={mode === "design" ? selected : undefined}
+          onSelectBlock={mode === "design" ? setSelected : undefined}
+        />
       </div>
 
       {/* ----- save bar ----- */}
@@ -422,6 +550,13 @@ export function CampaignEditor({
         </div>
       </div>
       {confirmDialog}
+      <TemplatePicker open={pickerOpen} onOpenChange={setPickerOpen} onPick={applyTemplate} />
+      <SaveTemplateDialog
+        open={saveName !== null}
+        onOpenChange={(open) => !open && setSaveName(null)}
+        defaultName={saveName ?? ""}
+        content={() => ({ design: mode === "design" ? design : null, html: sendHtml })}
+      />
     </form>
   );
 }
