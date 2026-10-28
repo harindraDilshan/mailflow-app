@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Settings,
   ClipboardList,
+  LayoutTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export function Sidebar({ collapsed = false, onToggleCollapse, className }: Side
       items: [
         { label: placeholders.nav.dashboard, href: "/dashboard", icon: LayoutDashboard },
         { label: placeholders.nav.campaigns, href: "/campaigns", icon: Send },
+        { label: placeholders.nav.templates, href: "/templates", icon: LayoutTemplate },
         { label: placeholders.nav.automations, href: "/automations", icon: Workflow },
       ],
     },

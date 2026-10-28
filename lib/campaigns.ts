@@ -19,6 +19,7 @@ export type CampaignRow = {
   fromEmail: string;
   replyTo?: string | null;
   html: string;
+  design?: string | null; // JSON block design of the visual editor (lib/email-design.ts)
   listIds: string[];
   status: string; // draft | scheduled | queued | sending | sent | failed
   scheduledAt?: string | null;

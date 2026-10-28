@@ -13,6 +13,7 @@ import { getQueues } from "@/lib/queue";
 import { rateLimit } from "@/lib/rate-limit";
 import { getProvider } from "@/lib/email";
 import { cleanHeader, htmlToText, renderEmail } from "@/lib/email/render";
+import { parseDesignJson, renderDesign } from "@/lib/email-design";
 import { plural } from "@/lib/format";
 
 export type CampaignFormState = { error?: string; message?: string; id?: string; intent?: string } | undefined;
@@ -22,6 +23,8 @@ export type ActionResult = { ok: boolean; message: string; id?: string };
 const MAX_HTML = 60000;
 const MIN_SCHEDULE_MS = 5 * 60_000; // at least 5 minutes ahead, so there is time to cancel
 const MAX_SCHEDULE_MS = 365 * 24 * 3_600_000;
+const SETUP_NEEDED = 'The database is missing the new template fields. Run "npm run db:setup", then try again.';
+const missingColumn = (e: unknown) => /Unknown attribute/i.test((e as { message?: string })?.message ?? "");
 
 function revalidateCampaigns() {
   revalidatePath("/campaigns", "layout"); // the list, every campaign page, and every report
@@ -41,7 +44,17 @@ async function readCampaignForm(accountId: string, formData: FormData) {
   const fromName = normalizeName(text("fromName")).slice(0, 100);
   const fromEmail = normalizeEmail(text("fromEmail"));
   const replyTo = normalizeEmail(text("replyTo"));
-  const html = text("html");
+  let html = text("html");
+
+  // Made in the visual editor: the server makes the HTML from the design, so both always match.
+  let design: string | null = null;
+  if (text("design")) {
+    const parsed = parseDesignJson(text("design"));
+    if (!parsed) return { error: "The design could not be read. Reload the page and try again." };
+    if (parsed.blocks.length === 0) return { error: "Add at least one block to the email." };
+    design = JSON.stringify(parsed);
+    html = renderDesign(parsed);
+  }
 
   if (!name) return { error: "Give the campaign a name." };
   if (!subject) return { error: "Add a subject line." };
@@ -55,7 +68,7 @@ async function readCampaignForm(accountId: string, formData: FormData) {
   const listIds = all ? [] : await filterOwnedListIds(accountId, formData.getAll("listIds").map(String));
   if (!all && listIds.length === 0) return { error: "Choose at least one list, or send to all active contacts." };
 
-  return { data: { name, subject, previewText, fromName, fromEmail, replyTo, html, listIds } };
+  return { data: { name, subject, previewText, fromName, fromEmail, replyTo, html, listIds }, design };
 }
 
 export async function saveCampaign(_: CampaignFormState, formData: FormData): Promise<CampaignFormState> {
@@ -76,19 +89,30 @@ export async function saveCampaign(_: CampaignFormState, formData: FormData): Pr
   const form = await readCampaignForm(user.$id, formData);
   if (!form.data) return { error: form.error };
 
+  // Only write the design column when it is used, so HTML campaigns also work before "db:setup".
+  const data = {
+    ...form.data,
+    ...(form.design ? { design: form.design } : existing?.design ? { design: null } : {}),
+  };
+
   const { tablesDB } = createAdminClient();
   let rowId = existing?.$id;
-  if (existing) {
-    await tablesDB.updateRow({ databaseId: DB_ID, tableId: CAMPAIGNS_TABLE, rowId: existing.$id, data: form.data });
-  } else {
-    const row = await tablesDB.createRow({
-      databaseId: DB_ID,
-      tableId: CAMPAIGNS_TABLE,
-      rowId: ID.unique(),
-      data: { accountId: user.$id, status: "draft", ...form.data },
-      permissions: [Permission.read(Role.user(user.$id))],
-    });
-    rowId = row.$id;
+  try {
+    if (existing) {
+      await tablesDB.updateRow({ databaseId: DB_ID, tableId: CAMPAIGNS_TABLE, rowId: existing.$id, data });
+    } else {
+      const row = await tablesDB.createRow({
+        databaseId: DB_ID,
+        tableId: CAMPAIGNS_TABLE,
+        rowId: ID.unique(),
+        data: { accountId: user.$id, status: "draft", ...data },
+        permissions: [Permission.read(Role.user(user.$id))],
+      });
+      rowId = row.$id;
+    }
+  } catch (e) {
+    if (missingColumn(e)) return { error: SETUP_NEEDED };
+    throw e;
   }
 
   revalidateCampaigns();
@@ -270,6 +294,7 @@ export async function duplicateCampaign(formData: FormData): Promise<ActionResul
       fromEmail: c.fromEmail,
       replyTo: c.replyTo ?? "",
       html: c.html,
+      ...(c.design ? { design: c.design } : {}),
       listIds: c.listIds ?? [],
     },
     permissions: [Permission.read(Role.user(user.$id))],

@@ -27,6 +27,7 @@ export const config = {
     "/dashboard/:path*",
     "/contacts/:path*",
     "/campaigns/:path*",
+    "/templates/:path*",
     "/automations/:path*",
     "/domains/:path*",
     "/developers/:path*",

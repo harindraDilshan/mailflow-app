@@ -74,6 +74,7 @@ const specs: Spec[] = [
       { key: "fromEmail", type: "varchar", size: 254, required: true },
       { key: "replyTo", type: "varchar", size: 254 },
       { key: "html", type: "text", required: true },
+      { key: "design", type: "mediumtext" }, // JSON block design of the visual editor (lib/email-design.ts)
       { key: "listIds", type: "varchar", size: 36, array: true },
       { key: "status", type: "varchar", size: 20, default: "draft" },
       { key: "scheduledAt", type: "datetime" },
@@ -194,6 +195,18 @@ const specs: Spec[] = [
       { key: "idx_status", type: "key", columns: ["status"] },
       { key: "idx_trigger", type: "key", columns: ["accountId", "status", "triggerType", "triggerValue"] },
     ],
+  },
+  {
+    id: "templates",
+    name: "templates",
+    columns: [
+      { key: "accountId", type: "varchar", size: 36, required: true },
+      { key: "name", type: "varchar", size: 150, required: true },
+      { key: "source", type: "varchar", size: 10, default: "design" }, // design | html
+      { key: "design", type: "mediumtext" }, // JSON block design (lib/email-design.ts), only for "design"
+      { key: "html", type: "mediumtext", required: true }, // ready to send
+    ],
+    indexes: [{ key: "idx_account", type: "key", columns: ["accountId"] }],
   },
   {
     id: "automation_runs",
