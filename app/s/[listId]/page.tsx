@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getList } from "@/lib/subscribe";
 import { designOf } from "@/lib/forms";
+import { recordFormImpression } from "@/lib/contacts";
 import { SignupForm } from "@/components/forms/signup-card";
 
 export const metadata = { robots: "noindex" };
@@ -21,6 +22,9 @@ async function HostedContent({ params }: { params: Promise<{ listId: string }> }
   const { listId } = await params;
   const list = await getList(listId);
   if (!list || !list.hostedEnabled || !list.fromEmail) notFound();
+
+  // Non-blocking impression increment
+  recordFormImpression(list.$id).catch(() => {});
 
   return <SignupForm listId={list.$id} design={designOf(list)} />;
 }

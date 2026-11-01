@@ -2,6 +2,9 @@
 // Pure code: the browser (live preview) and the server use the same rules.
 
 export type NameField = "off" | "optional" | "required";
+export type FormDisplay = "inline" | "popup" | "slide_in";
+export type IncentiveType = "standard" | "lead_magnet" | "discount_code" | "mystery_discount";
+
 export type FormDesign = {
   title: string;
   text: string;
@@ -9,11 +12,17 @@ export type FormDesign = {
   nameField: NameField;
   success: string;
   color: string; // "#rrggbb", the button color
+  display: FormDisplay;
+  badgeText: string;
+  incentiveType: IncentiveType;
+  incentiveValue: string;
 };
 
 export const DEFAULT_COLOR = "#18181b";
 export const DEFAULT_SUCCESS = "Thanks! Check your inbox and click the link to confirm your subscription.";
 export const NAME_FIELDS: NameField[] = ["off", "optional", "required"];
+export const FORM_DISPLAYS: FormDisplay[] = ["inline", "popup", "slide_in"];
+export const INCENTIVE_TYPES: IncentiveType[] = ["standard", "lead_magnet", "discount_code", "mystery_discount"];
 export const MAX_ORIGINS = 10;
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -26,6 +35,12 @@ type ListLike = {
   formNameField?: string | null;
   formSuccess?: string | null;
   formColor?: string | null;
+  formDisplay?: string | null;
+  formBadgeText?: string | null;
+  incentiveType?: string | null;
+  incentiveValue?: string | null;
+  formImpressions?: number | null;
+  formSubmits?: number | null;
 };
 
 export function designOf(list: ListLike): FormDesign {
@@ -36,6 +51,10 @@ export function designOf(list: ListLike): FormDesign {
     nameField: NAME_FIELDS.includes(list.formNameField as NameField) ? (list.formNameField as NameField) : "optional",
     success: list.formSuccess?.trim() || DEFAULT_SUCCESS,
     color: HEX.test(list.formColor ?? "") ? list.formColor!.toLowerCase() : DEFAULT_COLOR,
+    display: FORM_DISPLAYS.includes(list.formDisplay as FormDisplay) ? (list.formDisplay as FormDisplay) : "inline",
+    badgeText: list.formBadgeText?.trim() ?? "",
+    incentiveType: INCENTIVE_TYPES.includes(list.incentiveType as IncentiveType) ? (list.incentiveType as IncentiveType) : "standard",
+    incentiveValue: list.incentiveValue?.trim() ?? "",
   };
 }
 
@@ -44,6 +63,9 @@ export function cleanDesign(get: (name: string) => string) {
   const line = (name: string, max: number) => get(name).replace(/[\r\n]+/g, " ").trim().slice(0, max);
   const nameField = get("formNameField");
   const color = get("formColor").trim();
+  const display = get("formDisplay");
+  const incentiveType = get("incentiveType");
+
   return {
     pageTitle: line("pageTitle", 120),
     pageText: get("pageText").trim().slice(0, 500),
@@ -51,7 +73,18 @@ export function cleanDesign(get: (name: string) => string) {
     formNameField: NAME_FIELDS.includes(nameField as NameField) ? nameField : "optional",
     formSuccess: line("formSuccess", 300),
     formColor: HEX.test(color) ? color.toLowerCase() : "",
+    formDisplay: FORM_DISPLAYS.includes(display as FormDisplay) ? display : "inline",
+    formBadgeText: line("formBadgeText", 80),
+    incentiveType: INCENTIVE_TYPES.includes(incentiveType as IncentiveType) ? incentiveType : "standard",
+    incentiveValue: line("incentiveValue", 500),
   };
+}
+
+/** Computes the conversion rate percentage. Returns rounded to 1 decimal place. */
+export function conversionRateOf(submits: number, impressions: number): number {
+  if (impressions <= 0 || submits <= 0) return 0;
+  const rate = (submits / impressions) * 100;
+  return Math.min(100, Math.round(rate * 10) / 10);
 }
 
 /** Black or white text, whichever is easier to read on `hex` (WCAG relative luminance). */

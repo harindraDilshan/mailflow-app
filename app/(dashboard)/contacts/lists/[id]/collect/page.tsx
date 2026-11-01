@@ -10,7 +10,7 @@ import { requireUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/appwrite/admin";
 import { getOwnedList, signupStats } from "@/lib/contacts";
 import { findPublicKeyForList } from "@/lib/api-keys";
-import { designOf } from "@/lib/forms";
+import { conversionRateOf, designOf } from "@/lib/forms";
 import { formatNumber } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,10 @@ async function CollectContent({ params, searchParams }: { params: Promise<{ id: 
   const formKey = key?.publicKey ? { publicKey: key.publicKey, origins: key.allowedOrigins ?? [] } : null;
   const design = designOf(list);
 
+  const impressions = Number(list.formImpressions ?? 0);
+  const submits = Number(list.formSubmits ?? 0);
+  const cvr = conversionRateOf(submits, impressions);
+
   const tabs: FormTab[] = ["design", "share", "embed", "api", "email"];
   const initial: FormTab = tabs.includes(tab as FormTab) ? (tab as FormTab) : ready ? "design" : "email";
 
@@ -94,6 +98,11 @@ async function CollectContent({ params, searchParams }: { params: Promise<{ id: 
           <Badge variant="outline" className="font-normal">{list.name}</Badge>
           <Badge variant={live ? "secondary" : "outline"} className="font-normal">Link: {live ? "live" : "off"}</Badge>
           <Badge variant={formKey ? "secondary" : "outline"} className="font-normal">Website form: {formKey ? "ready" : "not set up"}</Badge>
+          {impressions > 0 && (
+            <Badge variant={cvr >= 10 ? "default" : "outline"} className="font-normal">
+              Conversion: {cvr}%
+            </Badge>
+          )}
         </div>
         <p className="text-xs text-muted-foreground">
           People who sign up here join <span className="font-medium text-foreground">{list.name}</span>. They confirm by email first.
@@ -117,6 +126,10 @@ async function CollectContent({ params, searchParams }: { params: Promise<{ id: 
                       formNameField: list.formNameField ?? "",
                       formSuccess: list.formSuccess ?? "",
                       formColor: list.formColor ?? "",
+                      formDisplay: list.formDisplay ?? "inline",
+                      formBadgeText: list.formBadgeText ?? "",
+                      incentiveType: list.incentiveType ?? "standard",
+                      incentiveValue: list.incentiveValue ?? "",
                     }}
                   />
                 ),
@@ -154,6 +167,42 @@ async function CollectContent({ params, searchParams }: { params: Promise<{ id: 
         </Card>
 
         <div className="space-y-6">
+          <Card size="sm">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Form Performance</CardTitle>
+                <Badge
+                  variant={cvr >= 10 ? "default" : cvr >= 5 ? "secondary" : "outline"}
+                  className="font-mono text-[11px]"
+                >
+                  {cvr >= 10 ? "⭐ High Converting" : `${cvr}% submit rate`}
+                </Badge>
+              </div>
+              <CardDescription>
+                {formatNumber(impressions)} views · {formatNumber(submits)} sign-ups
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Submit conversion</span>
+                <span className="font-semibold text-foreground">{cvr}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    cvr >= 10 ? "bg-emerald-500" : cvr >= 5 ? "bg-amber-500" : "bg-zinc-400"
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(cvr > 0 ? 5 : 0, (cvr / 15) * 100))}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {cvr >= 10
+                  ? "Target achieved! Your form is converting in the top 10% to 15% bracket."
+                  : "Tip: Add a bold incentive or mystery discount to reach 10% to 15% conversion."}
+              </p>
+            </CardContent>
+          </Card>
+
           <Card size="sm">
             <CardHeader>
               <CardTitle>Setup</CardTitle>

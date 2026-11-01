@@ -1,5 +1,5 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { filterOwnedListIds } from "@/lib/contacts";
+import { filterOwnedListIds, recordFormSubmit } from "@/lib/contacts";
 import { normalizeTags } from "@/lib/contact-rules";
 import { normalizeOrigin, touchKey } from "@/lib/api-keys";
 import { rateLimit } from "@/lib/rate-limit";
@@ -160,7 +160,10 @@ export async function POST(req: NextRequest) {
       keyId: key.$id,
     });
 
-    after(() => touchKey(key));
+    after(() => {
+      touchKey(key);
+      if (listIds[0]) recordFormSubmit(listIds[0]);
+    });
 
     if (!result.ok) {
       return isForm
