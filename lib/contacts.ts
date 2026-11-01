@@ -41,6 +41,12 @@ export type ListRow = {
   formNameField?: string | null;
   formSuccess?: string | null;
   formColor?: string | null;
+  formDisplay?: string | null;
+  formBadgeText?: string | null;
+  incentiveType?: string | null;
+  incentiveValue?: string | null;
+  formImpressions?: number | null;
+  formSubmits?: number | null;
 };
 
 function isConflict(e: unknown) {
@@ -405,4 +411,38 @@ export async function countRecentSignups(accountId: string, listId: string, days
     ],
   });
   return res.total;
+}
+
+// Increment form impression counter (non-blocking)
+export async function recordFormImpression(listId: string): Promise<void> {
+  try {
+    const { tablesDB } = createAdminClient();
+    const row = await tablesDB.getRow({ databaseId: DB_ID, tableId: LISTS_TABLE, rowId: listId });
+    const count = Number((row as unknown as { formImpressions?: number }).formImpressions ?? 0);
+    await tablesDB.updateRow({
+      databaseId: DB_ID,
+      tableId: LISTS_TABLE,
+      rowId: listId,
+      data: { formImpressions: count + 1 },
+    });
+  } catch {
+    // Non-blocking
+  }
+}
+
+// Increment form submission counter (non-blocking)
+export async function recordFormSubmit(listId: string): Promise<void> {
+  try {
+    const { tablesDB } = createAdminClient();
+    const row = await tablesDB.getRow({ databaseId: DB_ID, tableId: LISTS_TABLE, rowId: listId });
+    const count = Number((row as unknown as { formSubmits?: number }).formSubmits ?? 0);
+    await tablesDB.updateRow({
+      databaseId: DB_ID,
+      tableId: LISTS_TABLE,
+      rowId: listId,
+      data: { formSubmits: count + 1 },
+    });
+  } catch {
+    // Non-blocking
+  }
 }

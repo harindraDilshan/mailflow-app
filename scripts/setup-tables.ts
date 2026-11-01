@@ -34,6 +34,12 @@ const specs: Spec[] = [
       { key: "formNameField", type: "varchar", size: 10 }, // off | optional | required
       { key: "formSuccess", type: "varchar", size: 300 },
       { key: "formColor", type: "varchar", size: 7 }, // #rrggbb
+      { key: "formDisplay", type: "varchar", size: 20, default: "inline" }, // inline | popup | slide_in
+      { key: "formBadgeText", type: "varchar", size: 80 },
+      { key: "incentiveType", type: "varchar", size: 20, default: "standard" }, // standard | lead_magnet | discount_code | mystery_discount
+      { key: "incentiveValue", type: "varchar", size: 500 },
+      { key: "formImpressions", type: "int", default: 0 },
+      { key: "formSubmits", type: "int", default: 0 },
     ],
     indexes: [{ key: "idx_account", type: "key", columns: ["accountId"] }],
   },

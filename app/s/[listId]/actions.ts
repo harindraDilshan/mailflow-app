@@ -5,6 +5,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getList, subscribeEmail } from "@/lib/subscribe";
 import { clientIp } from "@/lib/api-helpers";
 import { designOf } from "@/lib/forms";
+import { recordFormSubmit } from "@/lib/contacts";
 
 type State = { error?: string; message?: string } | undefined;
 const PENDING = "Check your email to confirm your subscription.";
@@ -37,6 +38,10 @@ export async function hostedSubscribe(_: State, formData: FormData): Promise<Sta
       error: result.code === "invalid_email" ? "Enter a valid email address." : "Sign-ups are closed right now.",
     };
   }
-  // SPEC CHANGE: Always return PENDING so a visitor cannot find out who is already on a list.
+
+  // Non-blocking submission increment
+  recordFormSubmit(list.$id).catch(() => {});
+
+  // Always return PENDING so a visitor cannot find out who is already on a list.
   return { message: PENDING };
 }

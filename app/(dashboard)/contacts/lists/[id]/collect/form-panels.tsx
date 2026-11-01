@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Check, Code2, Download, ExternalLink, Link2, Loader2, Mail, Paintbrush, Terminal } from "lucide-react";
+import { Code2, Download, ExternalLink, Link2, Loader2, Mail, Paintbrush, Sparkles, Terminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -16,7 +16,15 @@ import { SignupPreview } from "@/components/forms/signup-card";
 import { useActionForm } from "@/hooks/use-action-form";
 import { runAction } from "@/components/run-action";
 import { buildEmbedSnippet } from "@/lib/embed";
-import { DEFAULT_COLOR, DEFAULT_SUCCESS, designOf, type FormDesign, type NameField } from "@/lib/forms";
+import {
+  DEFAULT_COLOR,
+  DEFAULT_SUCCESS,
+  designOf,
+  type FormDesign,
+  type FormDisplay,
+  type IncentiveType,
+  type NameField,
+} from "@/lib/forms";
 import { saveDesign, saveSender, setHostedPage, setupWebsiteForm, type FormState } from "./actions";
 
 const label = "text-xs font-medium text-foreground";
@@ -82,12 +90,29 @@ type ListValues = {
   formNameField: string;
   formSuccess: string;
   formColor: string;
+  formDisplay: string;
+  formBadgeText: string;
+  incentiveType: string;
+  incentiveValue: string;
 };
 
 const NAME_ITEMS = [
   { value: "optional", label: "Ask for the name (optional)" },
   { value: "required", label: "Ask for the name (required)" },
   { value: "off", label: "Do not ask for the name" },
+];
+
+const DISPLAY_ITEMS = [
+  { value: "inline", label: "Inline Card (on page)" },
+  { value: "popup", label: "Pop-up Modal (center dialog)" },
+  { value: "slide_in", label: "Corner Slide-In (bottom right)" },
+];
+
+const INCENTIVE_ITEMS = [
+  { value: "standard", label: "Standard (newsletter subscription)" },
+  { value: "discount_code", label: "Discount Code (instant coupon reveal)" },
+  { value: "lead_magnet", label: "Lead Magnet (free guide / download link)" },
+  { value: "mystery_discount", label: "Mystery Discount (interactive card reveal)" },
 ];
 
 export function DesignPanel({ list }: { list: ListValues }) {
@@ -100,19 +125,130 @@ export function DesignPanel({ list }: { list: ListValues }) {
     <div className="grid gap-6 lg:grid-cols-2">
       <form onSubmit={onSubmit} className="space-y-4">
         <input type="hidden" name="listId" value={list.id} />
-        <div className="space-y-1.5">
-          <label htmlFor="pageTitle" className={label}>Title</label>
-          <Input id="pageTitle" name="pageTitle" maxLength={120} value={v.pageTitle} placeholder={list.name} onChange={(e) => set({ pageTitle: e.target.value })} />
+
+        <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-900 dark:text-amber-300">
+            <Sparkles className="size-3.5" />
+            High-Converting Strategy Settings
+          </div>
+          <p className="mt-1 text-[11px] text-amber-800/80 dark:text-amber-400/80">
+            Offer an irresistible reward (discounts, ebooks, mystery gifts) to reach 10% to 15% conversion.
+          </p>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <span className={label}>Display format</span>
+              <Select
+                name="formDisplay"
+                items={DISPLAY_ITEMS}
+                value={design.display}
+                onValueChange={(x) => set({ formDisplay: String(x) as FormDisplay })}
+              >
+                <SelectTrigger className="w-full bg-white dark:bg-zinc-900" aria-label="Display format">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DISPLAY_ITEMS.map((i) => (
+                    <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="formBadgeText" className={label}>Top badge (optional)</label>
+              <Input
+                id="formBadgeText"
+                name="formBadgeText"
+                maxLength={80}
+                value={v.formBadgeText}
+                placeholder="e.g. LIMITED OFFER"
+                onChange={(e) => set({ formBadgeText: e.target.value })}
+                className="bg-white dark:bg-zinc-900"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-1.5">
+            <span className={label}>Incentive / Reward type</span>
+            <Select
+              name="incentiveType"
+              items={INCENTIVE_ITEMS}
+              value={design.incentiveType}
+              onValueChange={(x) => set({ incentiveType: String(x) as IncentiveType })}
+            >
+              <SelectTrigger className="w-full bg-white dark:bg-zinc-900" aria-label="Incentive type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {INCENTIVE_ITEMS.map((i) => (
+                  <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {design.incentiveType !== "standard" && (
+            <div className="mt-3 space-y-1.5">
+              <label htmlFor="incentiveValue" className={label}>
+                {design.incentiveType === "lead_magnet"
+                  ? "Download file URL (PDF or video)"
+                  : "Coupon code (e.g. WELCOME15 or SAVE20)"}
+              </label>
+              <Input
+                id="incentiveValue"
+                name="incentiveValue"
+                maxLength={500}
+                value={v.incentiveValue}
+                placeholder={
+                  design.incentiveType === "lead_magnet"
+                    ? "https://yourwebsite.com/downloads/guide.pdf"
+                    : "SAVE15"
+                }
+                onChange={(e) => set({ incentiveValue: e.target.value })}
+                className="bg-white font-mono text-xs dark:bg-zinc-900"
+              />
+            </div>
+          )}
         </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="pageTitle" className={label}>Headline</label>
+          <Input
+            id="pageTitle"
+            name="pageTitle"
+            maxLength={120}
+            value={v.pageTitle}
+            placeholder={list.name}
+            onChange={(e) => set({ pageTitle: e.target.value })}
+          />
+        </div>
+
         <div className="space-y-1.5">
           <label htmlFor="pageText" className={label}>Short text</label>
-          <Textarea id="pageText" name="pageText" rows={3} maxLength={500} value={v.pageText} placeholder="One email a week with our best tips. Unsubscribe at any time." onChange={(e) => set({ pageText: e.target.value })} />
-          <p className={hint}>Tell people what they get and how often. Clear promises get more sign-ups.</p>
+          <Textarea
+            id="pageText"
+            name="pageText"
+            rows={3}
+            maxLength={500}
+            value={v.pageText}
+            placeholder="Unlock your welcome voucher and receive our weekly marketing insights."
+            onChange={(e) => set({ pageText: e.target.value })}
+          />
+          <p className={hint}>Tell people what they get and why it is valuable.</p>
         </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label htmlFor="formButton" className={label}>Button text</label>
-            <Input id="formButton" name="formButton" maxLength={40} value={v.formButton} placeholder="Subscribe" onChange={(e) => set({ formButton: e.target.value })} />
+            <Input
+              id="formButton"
+              name="formButton"
+              maxLength={40}
+              value={v.formButton}
+              placeholder="Subscribe"
+              onChange={(e) => set({ formButton: e.target.value })}
+            />
           </div>
           <div className="space-y-1.5">
             <label htmlFor="formColor" className={label}>Button color</label>
@@ -125,13 +261,26 @@ export function DesignPanel({ list }: { list: ListValues }) {
                 className="h-8 w-10 cursor-pointer rounded-md border border-input bg-transparent p-0.5"
                 aria-label="Pick the button color"
               />
-              <Input name="formColor" value={v.formColor || DEFAULT_COLOR} maxLength={7} onChange={(e) => set({ formColor: e.target.value })} className="font-mono" aria-label="Button color as #rrggbb" />
+              <Input
+                name="formColor"
+                value={v.formColor || DEFAULT_COLOR}
+                maxLength={7}
+                onChange={(e) => set({ formColor: e.target.value })}
+                className="font-mono"
+                aria-label="Button color as #rrggbb"
+              />
             </div>
           </div>
         </div>
+
         <div className="space-y-1.5">
           <span className={label}>Name field</span>
-          <Select name="formNameField" items={NAME_ITEMS} value={design.nameField} onValueChange={(x) => set({ formNameField: String(x) as NameField })}>
+          <Select
+            name="formNameField"
+            items={NAME_ITEMS}
+            value={design.nameField}
+            onValueChange={(x) => set({ formNameField: String(x) as NameField })}
+          >
             <SelectTrigger className="w-full" aria-label="Name field">
               <SelectValue />
             </SelectTrigger>
@@ -143,20 +292,30 @@ export function DesignPanel({ list }: { list: ListValues }) {
           </Select>
           <p className={hint}>Fewer fields get more sign-ups. Ask for the name only if you use it in your emails.</p>
         </div>
+
         <div className="space-y-1.5">
           <label htmlFor="formSuccess" className={label}>Message after sign-up</label>
-          <Textarea id="formSuccess" name="formSuccess" rows={2} maxLength={300} value={v.formSuccess} placeholder={DEFAULT_SUCCESS} onChange={(e) => set({ formSuccess: e.target.value })} />
+          <Textarea
+            id="formSuccess"
+            name="formSuccess"
+            rows={2}
+            maxLength={300}
+            value={v.formSuccess}
+            placeholder={DEFAULT_SUCCESS}
+            onChange={(e) => set({ formSuccess: e.target.value })}
+          />
         </div>
+
         {state?.error && <FormMessage tone="error">{state.error}</FormMessage>}
         <Save pending={pending}>Save design</Save>
       </form>
 
       <div className="space-y-2">
-        <span className={label}>Preview</span>
+        <span className={label}>Live Preview</span>
         <div className="flex justify-center rounded-xl border border-border bg-zinc-100 p-6 dark:bg-zinc-900">
           <SignupPreview design={design} />
         </div>
-        <p className={hint}>The hosted page and the embed code use this design.</p>
+        <p className={hint}>Toggle between Opt-in View and Success & Reward View to test the visitor experience.</p>
       </div>
     </div>
   );
@@ -289,7 +448,7 @@ export function EmbedPanel({
             Include simple styles
           </label>
         </div>
-        <CodeBlock code={buildEmbedSnippet(appUrl, formKey.publicKey, design, { styled })} language="html" />
+        <CodeBlock code={buildEmbedSnippet(appUrl, formKey.publicKey, design, { styled, listId })} language="html" />
         <p className={hint}>
           Paste it where the form should show, for example in a &ldquo;Custom HTML&rdquo; block in WordPress, Webflow, Wix,
           or Squarespace. Turn off the styles to use the look of your website.
@@ -303,36 +462,27 @@ export function EmbedPanel({
           <li>Open the confirmation email and click the link.</li>
           <li>Find yourself in &ldquo;Recent sign-ups&rdquo; on this page, first as pending, then as active.</li>
         </ol>
-        <p className="flex items-start gap-1.5 pt-1 text-muted-foreground">
-          <Check className="mt-px size-3.5 shrink-0" />
-          Without JavaScript the form still works: it opens a thank-you page.
-        </p>
       </div>
     </div>
   );
 }
 
-// ---------- the confirmation email sender ----------
+// ---------- sender panel (confirmation email) ----------
 export function SenderPanel({ listId, fromName, fromEmail }: { listId: string; fromName: string; fromEmail: string }) {
   const { state, pending, onSubmit } = useToastForm(saveSender);
+
   return (
     <form onSubmit={onSubmit} className="max-w-xl space-y-4">
       <input type="hidden" name="listId" value={listId} />
-      <p className="text-xs text-muted-foreground">
-        Every new subscriber gets an email with a confirmation link first (double opt-in). Only confirmed people get
-        your campaigns. This keeps fake and mistyped addresses off your list.
-      </p>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label htmlFor="fromName" className={label}>Sender name</label>
-          <Input id="fromName" name="fromName" maxLength={100} defaultValue={fromName} placeholder="Acme Team" />
-        </div>
-        <div className="space-y-1.5">
-          <label htmlFor="fromEmail" className={label}>Sender email</label>
-          <Input id="fromEmail" name="fromEmail" type="email" required defaultValue={fromEmail} placeholder="hello@mail.yourdomain.com" />
-        </div>
+      <div className="space-y-1.5">
+        <label htmlFor="fromName" className={label}>Sender name</label>
+        <Input id="fromName" name="fromName" defaultValue={fromName} placeholder="Acme Team" maxLength={100} />
       </div>
-      <p className={hint}>Use an address on a domain that you verified in Sending domains.</p>
+      <div className="space-y-1.5">
+        <label htmlFor="fromEmail" className={label}>Sender email address</label>
+        <Input id="fromEmail" name="fromEmail" type="email" defaultValue={fromEmail} placeholder="newsletter@example.com" maxLength={254} required />
+        <p className={hint}>Must use a verified domain from your Domains settings.</p>
+      </div>
       {state?.error && <FormMessage tone="error">{state.error}</FormMessage>}
       <Save pending={pending}>Save sender</Save>
     </form>
